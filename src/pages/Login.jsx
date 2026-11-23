@@ -33,7 +33,13 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const resultAction = await dispatch(loginUserAsync({ email: emailKey, password: form.password }));
+      const resultAction = await dispatch(
+        loginUserAsync({
+          email: emailKey,
+          password: form.password,
+          remember: Boolean(remember),
+        })
+      );
       if (loginUserAsync.fulfilled.match(resultAction)) {
         setLoading(false);
         navigate("/dashboard");

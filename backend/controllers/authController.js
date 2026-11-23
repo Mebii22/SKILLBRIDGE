@@ -47,7 +47,16 @@ const registerUser = async (req, res) => {
             });
         }
 
-        const normalizedEmail = email.toLowerCase().trim();
+        const normalizedEmail = String(email).toLowerCase().trim();
+
+        // Validate email format (RFC 5322 dot-atom: disallows leading/trailing/consecutive dots)
+        const emailRegex = /^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+        if (!emailRegex.test(normalizedEmail) || normalizedEmail.length > 254) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide a valid email address"
+            });
+        }
 
         // Check existing user
         const existingUser = await User.findOne({ email: normalizedEmail });
@@ -181,6 +190,16 @@ const loginUser = async (req, res) => {
             });
         }
 
+        // Compare password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password"
+            });
+        }
+
         // Check account status
         if (user.status === "Disabled") {
             return res.status(403).json({
@@ -189,13 +208,18 @@ const loginUser = async (req, res) => {
             });
         }
 
-        // Compare password
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-
-        if (!isPasswordValid) {
-            return res.status(401).json({
+        // Enforce user-only role for regular login (reject admin accounts)
+        if (user.role === "admin") {
+            return res.status(403).json({
                 success: false,
-                message: "Invalid email or password"
+                message: "Admin accounts must sign in through the Admin Portal."
+            });
+        }
+
+        if (user.role !== "user") {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied: Unauthorized role."
             });
         }
 

@@ -56,7 +56,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const token =
+      (typeof localStorage !== "undefined" && localStorage.getItem("token")) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("token")) ||
+      null;
     if (token) {
       store.dispatch(fetchMeAsync());
     }

@@ -11,10 +11,13 @@ const API = axios.create({
   timeout: 20000,
 });
 
-// Request Interceptor: Automatically attach JWT token
+// Request Interceptor: Automatically attach JWT token (checks localStorage then sessionStorage)
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token =
+      (typeof localStorage !== "undefined" && localStorage.getItem("token")) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("token")) ||
+      null;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -37,6 +40,9 @@ API.interceptors.response.use(
         localStorage.removeItem("token");
         localStorage.removeItem("userLoggedIn");
         localStorage.removeItem("currentUser");
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("userLoggedIn");
+        sessionStorage.removeItem("currentUser");
         // Only redirect if not already on login
         if (window.location.pathname.startsWith("/admin")) {
           localStorage.removeItem("adminLoggedIn");

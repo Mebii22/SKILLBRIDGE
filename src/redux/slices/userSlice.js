@@ -19,14 +19,65 @@ const saveStorage = (key, val) => {
   }
 };
 
+// Storage management for Remember Me (localStorage vs sessionStorage)
+export const saveAuthStorage = (token, user, remember = true) => {
+  try {
+    const primaryStorage = remember ? localStorage : sessionStorage;
+    const secondaryStorage = remember ? sessionStorage : localStorage;
+
+    // Purge stale credentials from alternate storage to prevent conflicting states
+    secondaryStorage.removeItem("token");
+    secondaryStorage.removeItem("userLoggedIn");
+    secondaryStorage.removeItem("currentUser");
+
+    // Persist active session in primary storage
+    if (token) primaryStorage.setItem("token", token);
+    primaryStorage.setItem("userLoggedIn", "true");
+    if (user) primaryStorage.setItem("currentUser", JSON.stringify(user));
+  } catch (e) {
+    console.error("Failed to save auth storage:", e);
+  }
+};
+
+export const clearAuthStorage = () => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userLoggedIn");
+      localStorage.removeItem("currentUser");
+      localStorage.removeItem("user");
+    }
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("userLoggedIn");
+      sessionStorage.removeItem("currentUser");
+      sessionStorage.removeItem("user");
+    }
+  } catch (e) {
+    console.error("Failed to clear auth storage:", e);
+  }
+};
+
+const updateActiveStorageUser = (user) => {
+  try {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("currentUser")) {
+      localStorage.setItem("currentUser", JSON.stringify(user));
+    }
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("currentUser")) {
+      sessionStorage.setItem("currentUser", JSON.stringify(user));
+    }
+  } catch (e) {
+    console.error("Failed to update active storage user:", e);
+  }
+};
+
 // ASYNC THUNKS (Real Backend Integration)
 export const loginUserAsync = createAsyncThunk("user/loginUserAsync", async (credentials, { rejectWithValue }) => {
   try {
-    const res = await API.post("/auth/login", credentials);
+    const { email, password, remember = true } = credentials;
+    const res = await API.post("/auth/login", { email, password });
     if (res.data.token) {
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("userLoggedIn", "true");
-      saveStorage("currentUser", res.data.user);
+      saveAuthStorage(res.data.token, res.data.user, remember);
     }
     return res.data.user;
   } catch (err) {
@@ -47,7 +98,7 @@ export const registerUserAsync = createAsyncThunk("user/registerUserAsync", asyn
 export const fetchMeAsync = createAsyncThunk("user/fetchMeAsync", async (_, { rejectWithValue }) => {
   try {
     const res = await API.get("/auth/me");
-    saveStorage("currentUser", res.data.user);
+    updateActiveStorageUser(res.data.user);
     return res.data.user;
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || "Failed to fetch user");
@@ -66,7 +117,7 @@ export const fetchUsersAsync = createAsyncThunk("user/fetchUsersAsync", async (q
 export const updateUserAsync = createAsyncThunk("user/updateUserAsync", async (profileData, { rejectWithValue }) => {
   try {
     const res = await API.put("/users/profile", profileData);
-    saveStorage("currentUser", res.data.user);
+    updateActiveStorageUser(res.data.user);
     return res.data.user;
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || "Failed to update profile");
@@ -106,14 +157,26 @@ const initialUsers = (() => {
   return defaultUsers;
 })();
 
-// Current logged in user
+// Current logged in user (hydrates from localStorage or sessionStorage)
 const initialCurrentUser = (() => {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
-  const loggedIn = loadStorage("userLoggedIn", false);
-  if (!loggedIn || !token) return null;
-  const storedUser = loadStorage("currentUser", null);
-  if (storedUser) {
-    return storedUser;
+  try {
+    // 1. Check persistent localStorage (Remember Me checked)
+    const localToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const localLoggedIn = typeof localStorage !== "undefined" ? localStorage.getItem("userLoggedIn") : null;
+    if (localToken && localLoggedIn === "true") {
+      const storedUser = localStorage.getItem("currentUser");
+      if (storedUser) return JSON.parse(storedUser);
+    }
+
+    // 2. Check tab sessionStorage (Remember Me unchecked)
+    const sessionToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("token") : null;
+    const sessionLoggedIn = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("userLoggedIn") : null;
+    if (sessionToken && sessionLoggedIn === "true") {
+      const storedUser = sessionStorage.getItem("currentUser");
+      if (storedUser) return JSON.parse(storedUser);
+    }
+  } catch {
+    return null;
   }
   return null;
 })();
@@ -138,13 +201,7 @@ const userSlice = createSlice({
     },
     logoutUser(state) {
       state.currentUser = null;
-      try {
-        localStorage.removeItem("token");
-        localStorage.removeItem("userLoggedIn");
-        localStorage.removeItem("currentUser");
-      } catch (e) {
-        console.error(e);
-      }
+      clearAuthStorage();
     },
     registerUser(state, action) {
       const { user } = action.payload;
@@ -157,7 +214,7 @@ const userSlice = createSlice({
     updateUser(state, action) {
       const updated = { ...state.currentUser, ...action.payload };
       state.currentUser = updated;
-      saveStorage("currentUser", updated);
+      updateActiveStorageUser(updated);
       state.users = state.users.map((u) => (u.id === updated.id || u.email === updated.email ? { ...u, ...updated } : u));
       saveStorage("skillbridge_users", state.users);
     },
@@ -250,13 +307,7 @@ const userSlice = createSlice({
       })
       .addCase(fetchMeAsync.rejected, (state) => {
         state.currentUser = null;
-        try {
-          localStorage.removeItem("token");
-          localStorage.removeItem("userLoggedIn");
-          localStorage.removeItem("currentUser");
-        } catch (e) {
-          console.error(e);
-        }
+        clearAuthStorage();
       })
       // Toggle User Status
       .addCase(toggleUserStatusAsync.fulfilled, (state, action) => {
@@ -269,13 +320,7 @@ const userSlice = createSlice({
         state.users = state.users.filter((u) => u.id !== id && u._id !== id);
         if (state.currentUser && (state.currentUser.id === id || state.currentUser._id === id)) {
           state.currentUser = null;
-          try {
-            localStorage.removeItem("userLoggedIn");
-            localStorage.removeItem("currentUser");
-            localStorage.removeItem("token");
-          } catch (e) {
-            console.error(e);
-          }
+          clearAuthStorage();
         }
       });
   },

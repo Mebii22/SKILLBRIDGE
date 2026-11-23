@@ -23,29 +23,47 @@ const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
-// Allowed Origins (Local Vite dev + Production Vercel deploy + optional CLIENT_URL)
+// Allowed Origins (Local Vite dev + Production Vercel deploy + optional CLIENT_URL / ALLOWED_ORIGINS)
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
     "https://skillbridge-six-olive.vercel.app"
 ];
 
+// Append origins from environment configuration
 if (process.env.CLIENT_URL) {
-    const customOrigin = process.env.CLIENT_URL.trim().replace(/\/$/, "");
-    if (!allowedOrigins.includes(customOrigin)) {
-        allowedOrigins.push(customOrigin);
-    }
+    process.env.CLIENT_URL.split(",").forEach((url) => {
+        const customOrigin = url.trim().replace(/\/$/, "");
+        if (customOrigin && !allowedOrigins.includes(customOrigin)) {
+            allowedOrigins.push(customOrigin);
+        }
+    });
+}
+
+if (process.env.ALLOWED_ORIGINS) {
+    process.env.ALLOWED_ORIGINS.split(",").forEach((url) => {
+        const customOrigin = url.trim().replace(/\/$/, "");
+        if (customOrigin && !allowedOrigins.includes(customOrigin)) {
+            allowedOrigins.push(customOrigin);
+        }
+    });
 }
 
 app.use(cors({
     origin: function (origin, callback) {
-        // allow requests with no origin (like mobile apps, curl, postman)
+        // Allow requests with no origin (like mobile apps, curl, postman, server-to-server)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith(".vercel.app")) {
-            callback(null, true);
-        } else {
-            callback(null, true); // Permissive in dev/preview
+
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
         }
+
+        // Reject unapproved browser origins
+        const corsError = new Error(`Not allowed by CORS: Origin ${origin} is not permitted.`);
+        corsError.status = 403;
+        return callback(corsError);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -94,6 +112,13 @@ app.use((req, res) => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
+    if (err.message && err.message.startsWith("Not allowed by CORS")) {
+        return res.status(403).json({
+            success: false,
+            message: err.message
+        });
+    }
+
     console.error("Server Error:", err.stack);
     res.status(err.status || 500).json({
         success: false,

@@ -37,6 +37,10 @@ export default function DashboardLayout() {
     localStorage.removeItem("userLoggedIn");
     localStorage.removeItem("currentUser");
     localStorage.removeItem("user");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("userLoggedIn");
+    sessionStorage.removeItem("currentUser");
+    sessionStorage.removeItem("user");
     dispatch(logoutUser());
     navigate("/");
   };
