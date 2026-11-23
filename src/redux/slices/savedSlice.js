@@ -1,4 +1,5 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import API from "../../api/client.js";
 
 const loadStorage = (key, fallback) => {
   try {
@@ -19,27 +20,41 @@ const saveStorage = (key, val) => {
 
 const getUserId = () => {
   const u = loadStorage("currentUser", null);
-  return u ? String(u.id) : "1";
+  return u ? String(u.id || u._id) : null;
 };
 
 const getSavedForUser = (userId) => {
-  if (!userId || userId === "1") {
-    const existing = loadStorage("skillbridge_saved_1", null) || loadStorage("savedProfiles", null);
-    if (existing && Array.isArray(existing)) return existing;
-    saveStorage("skillbridge_saved_1", [2]);
-    saveStorage("savedProfiles", [2]);
-    return [2];
-  }
-  return loadStorage(`skillbridge_saved_${userId}`, []);
+  if (!userId) return [];
+  const existing = loadStorage(`skillbridge_saved_${userId}`, null);
+  if (existing && Array.isArray(existing)) return existing;
+  return [];
 };
 
 const saveUserSaved = (savedIds) => {
   const uid = getUserId();
-  saveStorage(`skillbridge_saved_${uid}`, savedIds);
-  if (uid === "1") {
-    saveStorage("savedProfiles", savedIds);
+  if (uid) {
+    saveStorage(`skillbridge_saved_${uid}`, savedIds);
   }
 };
+
+// ASYNC THUNKS
+export const fetchSavedProfilesAsync = createAsyncThunk("saved/fetchSavedProfilesAsync", async (_, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/users/saved/all");
+    return res.data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch saved profiles");
+  }
+});
+
+export const toggleSavedAsync = createAsyncThunk("saved/toggleSavedAsync", async (targetId, { rejectWithValue }) => {
+  try {
+    const res = await API.post(`/users/saved/${targetId}`);
+    return { targetId, saved: res.data.saved, savedIds: res.data.savedIds };
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to update saved profile");
+  }
+});
 
 const initialSaved = (() => {
   const uid = getUserId();
@@ -48,37 +63,83 @@ const initialSaved = (() => {
 
 const savedSlice = createSlice({
   name: "saved",
-  initialState: { savedIds: initialSaved },
+  initialState: {
+    savedIds: initialSaved,
+    savedUsers: [],
+    loading: false,
+    error: null,
+  },
   reducers: {
     toggleSaved(state, action) {
-      const id = action.payload;
-      if (state.savedIds.includes(id)) {
-        state.savedIds = state.savedIds.filter((s) => s !== id);
+      const id = String(action.payload);
+      if (state.savedIds.map(String).includes(id)) {
+        state.savedIds = state.savedIds.filter((s) => String(s) !== id);
       } else {
-        state.savedIds.push(id);
+        state.savedIds.push(action.payload);
       }
       saveUserSaved(state.savedIds);
     },
     removeSaved(state, action) {
-      state.savedIds = state.savedIds.filter((s) => s !== action.payload);
+      const id = String(action.payload);
+      state.savedIds = state.savedIds.filter((s) => String(s) !== id);
       saveUserSaved(state.savedIds);
     },
   },
   extraReducers: (builder) => {
     builder
+      // Fetch Saved Profiles Async
+      .addCase(fetchSavedProfilesAsync.fulfilled, (state, action) => {
+        state.savedIds = action.payload.savedIds || [];
+        state.savedUsers = action.payload.savedUsers || [];
+        saveUserSaved(action.payload.savedIds);
+      })
+      // Toggle Saved Async
+      .addCase(toggleSavedAsync.fulfilled, (state, action) => {
+        const { targetId, saved } = action.payload;
+        const idStr = String(targetId);
+        if (saved) {
+          if (!state.savedIds.map(String).includes(idStr)) {
+            state.savedIds.push(targetId);
+          }
+        } else {
+          state.savedIds = state.savedIds.filter((s) => String(s) !== idStr);
+          state.savedUsers = state.savedUsers.filter((u) => String(u.id || u._id) !== idStr);
+        }
+        saveUserSaved(state.savedIds);
+      })
+      // Legacy user actions
       .addCase("user/loginUser", (state, action) => {
-        const user = action.payload || { id: 1 };
-        const uid = String(user.id);
-        state.savedIds = getSavedForUser(uid);
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.savedIds = getSavedForUser(uid);
+        } else {
+          state.savedIds = [];
+        }
+      })
+      .addCase("user/loginUserAsync/fulfilled", (state, action) => {
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.savedIds = getSavedForUser(uid);
+        } else {
+          state.savedIds = [];
+        }
       })
       .addCase("user/registerUser", (state, action) => {
         const { user } = action.payload || {};
-        const uid = user ? String(user.id) : Date.now().toString();
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.savedIds = [];
+          saveStorage(`skillbridge_saved_${uid}`, []);
+        }
+      })
+      .addCase("user/registerUserAsync/fulfilled", (state) => {
         state.savedIds = [];
-        saveStorage(`skillbridge_saved_${uid}`, []);
       })
       .addCase("user/logoutUser", (state) => {
-        state.savedIds = [2];
+        state.savedIds = [];
+        state.savedUsers = [];
       });
   },
 });

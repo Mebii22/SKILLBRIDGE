@@ -1,12 +1,32 @@
+import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { reviewReport, resolveReport, removeReport } from "../../redux/slices/adminSlice";
+import {
+  reviewReport,
+  resolveReport,
+  removeReport,
+  fetchAdminReportsAsync,
+  reviewReportAsync,
+  resolveReportAsync,
+} from "../../redux/slices/adminSlice";
 
 export default function Reports() {
   const list = useSelector((s) => s.admin.reports);
   const dispatch = useDispatch();
 
-  const handleReview = (id) => dispatch(reviewReport(id));
-  const handleResolve = (id) => dispatch(resolveReport(id));
+  useEffect(() => {
+    dispatch(fetchAdminReportsAsync());
+  }, [dispatch]);
+
+  const handleReview = (id, r) => {
+    dispatch(reviewReport(id));
+    dispatch(reviewReportAsync(r?._id || id));
+  };
+
+  const handleResolve = (id, r) => {
+    dispatch(resolveReport(id));
+    dispatch(resolveReportAsync(r?._id || id));
+  };
+
   const handleRemove = (id) => dispatch(removeReport(id));
 
   return (
@@ -24,7 +44,7 @@ export default function Reports() {
             </thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.id}>
+                <tr key={r._id || r.id}>
                   <td style={{ fontWeight: 700 }}>{r.target}</td>
                   <td className="t-mail">{r.reason}</td>
                   <td className="t-mail">{r.date}</td>
@@ -36,10 +56,10 @@ export default function Reports() {
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {r.status === "open" && (
-                        <button className="btn-xs" onClick={() => handleReview(r.id)}>Review</button>
+                        <button className="btn-xs" onClick={() => handleReview(r.id, r)}>Review</button>
                       )}
                       {r.status !== "resolved" && (
-                        <button className="btn-xs dark" onClick={() => handleResolve(r.id)}>Resolve</button>
+                        <button className="btn-xs dark" onClick={() => handleResolve(r.id, r)}>Resolve</button>
                       )}
                       <button className="btn-xs danger" onClick={() => handleRemove(r.id)}>Remove</button>
                     </div>

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { FiRepeat, FiCalendar, FiArrowUpRight, FiArrowDownLeft, FiArrowRight, FiCheck } from "react-icons/fi";
-import { sendRequest } from "../../redux/slices/exchangeSlice";
-import { addNotification } from "../../redux/slices/notificationSlice";
+import { sendRequest, createExchangeAsync, fetchExchangesAsync } from "../../redux/slices/exchangeSlice";
+import { fetchSessionsAsync } from "../../redux/slices/sessionSlice";
+import { fetchUsersAsync, fetchMeAsync } from "../../redux/slices/userSlice";
+import { addNotification, fetchNotificationsAsync } from "../../redux/slices/notificationSlice";
 import { calculateMatchScore } from "../../utils/matching";
 
 export default function Dashboard() {
@@ -15,6 +17,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [sentIds, setSentIds] = useState([]);
 
+  useEffect(() => {
+    dispatch(fetchMeAsync());
+    dispatch(fetchExchangesAsync());
+    dispatch(fetchSessionsAsync());
+    dispatch(fetchUsersAsync());
+    dispatch(fetchNotificationsAsync());
+  }, [dispatch]);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -22,22 +32,34 @@ export default function Dashboard() {
   const upcoming = sessions.filter((s) => s.status === "upcoming");
 
   const recommended = [...allUsers]
-    .filter((u) => String(u.id) !== String(user?.id) && u.status !== "Disabled")
+    .filter((u) => String(u.id || u._id) !== String(user?.id || user?._id) && u.status !== "Disabled")
     .sort((a, b) => calculateMatchScore(user, b).score - calculateMatchScore(user, a).score)
     .slice(0, 3);
 
   const connect = (u) => {
-    const teachSkill = (u.teaches && u.teaches[0]) || "General Skills";
-    const wantSkill = (u.wants && u.wants[0]) || "New Skills";
+    const teachSkill = (user?.teaches && user.teaches[0]) || "General Skills";
+    const wantSkill = (u.wants && u.wants[0]) || (u.teaches && u.teaches[0]) || "New Skills";
+    
+    // Optimistic local dispatch
     dispatch(
       sendRequest({
-        partnerId: u.id,
+        partnerId: u.id || u._id,
         partnerName: u.name,
         partnerPhoto: u.photo,
         teach: teachSkill,
         want: wantSkill,
       })
     );
+
+    // Backend API persistence
+    dispatch(
+      createExchangeAsync({
+        partnerId: u.id || u._id,
+        teach: teachSkill,
+        want: wantSkill,
+      })
+    );
+
     dispatch(
       addNotification({
         type: "request",
@@ -45,14 +67,24 @@ export default function Dashboard() {
         text: `You sent an exchange request to ${u.name}.`,
       })
     );
-    setSentIds([...sentIds, u.id]);
+    setSentIds([...sentIds, u.id || u._id]);
   };
 
   const stats = [
     { label: "Active Exchanges", value: active.length, icon: <FiRepeat /> },
     { label: "Upcoming Sessions", value: upcoming.length, icon: <FiCalendar /> },
-    { label: "Skills Offered", value: user?.teaches?.length || 0, icon: <FiArrowUpRight /> },
-    { label: "Skills Learning", value: user?.wants?.length || 0, icon: <FiArrowDownLeft /> },
+    {
+      label: "Skills Offered",
+      value: user?.teaches?.length || 0,
+      sub: (user?.teaches || []).join(", ") || "None listed",
+      icon: <FiArrowUpRight />,
+    },
+    {
+      label: "Skills Learning",
+      value: user?.wants?.length || 0,
+      sub: (user?.wants || []).join(", ") || "None listed",
+      icon: <FiArrowDownLeft />,
+    },
   ];
 
   return (
@@ -70,6 +102,21 @@ export default function Dashboard() {
               <span className="stat-icon">{s.icon}</span>
             </div>
             <div className="stat-value">{s.value}</div>
+            {s.sub && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--gray)",
+                  marginTop: 6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={s.sub}
+              >
+                {s.sub}
+              </div>
+            )}
           </div>
         ))}
       </div>

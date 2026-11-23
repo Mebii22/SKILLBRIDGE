@@ -1,4 +1,5 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import API from "../../api/client.js";
 import { exchanges as dummyExchanges } from "../../data/dummyData.js";
 
 const loadStorage = (key, fallback) => {
@@ -20,27 +21,86 @@ const saveStorage = (key, val) => {
 
 const getUserId = () => {
   const u = loadStorage("currentUser", null);
-  return u ? String(u.id) : "1";
+  return u ? String(u.id || u._id) : null;
 };
 
 const getExchangesForUser = (userId) => {
-  if (!userId || userId === "1") {
-    const existing = loadStorage("skillbridge_exchanges_1", null) || loadStorage("skillbridge_exchanges", null);
-    if (existing && Array.isArray(existing)) return existing;
-    saveStorage("skillbridge_exchanges_1", dummyExchanges);
-    saveStorage("skillbridge_exchanges", dummyExchanges);
-    return dummyExchanges;
-  }
-  return loadStorage(`skillbridge_exchanges_${userId}`, []);
+  if (!userId) return [];
+  const existing = loadStorage(`skillbridge_exchanges_${userId}`, null);
+  if (existing && Array.isArray(existing)) return existing;
+  return [];
 };
 
 const saveUserExchanges = (exchanges) => {
   const uid = getUserId();
-  saveStorage(`skillbridge_exchanges_${uid}`, exchanges);
-  if (uid === "1") {
-    saveStorage("skillbridge_exchanges", exchanges);
+  if (uid) {
+    saveStorage(`skillbridge_exchanges_${uid}`, exchanges);
   }
 };
+
+// ASYNC THUNKS
+export const fetchExchangesAsync = createAsyncThunk("exchanges/fetchExchangesAsync", async (status, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/exchanges/my", { params: { status } });
+    return res.data.exchanges;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch exchanges");
+  }
+});
+
+export const createExchangeAsync = createAsyncThunk("exchanges/createExchangeAsync", async (payload, { rejectWithValue }) => {
+  try {
+    const res = await API.post("/exchanges", payload);
+    return res.data.exchange;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to create exchange");
+  }
+});
+
+export const acceptExchangeAsync = createAsyncThunk("exchanges/acceptExchangeAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.put(`/exchanges/${id}/accept`);
+    return res.data.exchange;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to accept exchange");
+  }
+});
+
+export const rejectExchangeAsync = createAsyncThunk("exchanges/rejectExchangeAsync", async (id, { rejectWithValue }) => {
+  try {
+    await API.put(`/exchanges/${id}/reject`);
+    return id;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to reject exchange");
+  }
+});
+
+export const cancelExchangeAsync = createAsyncThunk("exchanges/cancelExchangeAsync", async (id, { rejectWithValue }) => {
+  try {
+    await API.put(`/exchanges/${id}/cancel`);
+    return id;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to cancel exchange");
+  }
+});
+
+export const completeExchangeSessionAsync = createAsyncThunk("exchanges/completeSessionAsync", async ({ exchangeId, sessionId }, { rejectWithValue }) => {
+  try {
+    const res = await API.put(`/exchanges/${exchangeId}/complete-session`, { sessionId });
+    return res.data.exchange;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to complete session");
+  }
+});
+
+export const submitExchangeReviewAsync = createAsyncThunk("exchanges/submitReviewAsync", async ({ exchangeId, rating, review }, { rejectWithValue }) => {
+  try {
+    const res = await API.post(`/exchanges/${exchangeId}/review`, { rating, review });
+    return res.data.exchange;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to submit review");
+  }
+});
 
 const initialExchanges = (() => {
   const uid = getUserId();
@@ -49,7 +109,11 @@ const initialExchanges = (() => {
 
 const exchangeSlice = createSlice({
   name: "exchanges",
-  initialState: { exchanges: initialExchanges },
+  initialState: {
+    exchanges: initialExchanges,
+    loading: false,
+    error: null,
+  },
   reducers: {
     sendRequest(state, action) {
       const payload = action.payload || {};
@@ -60,7 +124,6 @@ const exchangeSlice = createSlice({
       const location = payload.meetingLocation || (mode === "Offline" ? "Public Library / Cafe" : "");
       const meetingLink = payload.meetingLink || (mode === "Online" ? "https://meet.google.com/sb-learn-hub" : "");
 
-      // Generate default session schedule plan
       const generatedSessions = Array.from({ length: totalSessions }, (_, idx) => {
         const num = idx + 1;
         return {
@@ -115,37 +178,18 @@ const exchangeSlice = createSlice({
       saveUserExchanges(state.exchanges);
     },
     acceptRequest(state, action) {
-      const ex = state.exchanges.find((e) => e.id === action.payload);
+      const ex = state.exchanges.find((e) => e.id === action.payload || e._id === action.payload);
       if (ex) {
         ex.status = "active";
         if (ex.agreement) {
           ex.agreement.status = "active";
           ex.agreement.acceptedAt = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
         }
-        if (!ex.sessions || ex.sessions.length === 0) {
-          const totalSessions = Number(ex.totalSessions) || 4;
-          ex.sessions = Array.from({ length: totalSessions }, (_, idx) => {
-            const num = idx + 1;
-            return {
-              id: Date.now() + num,
-              sessionNum: num,
-              title: `Session ${num}: ${num % 2 === 1 ? ex.teach : ex.want}`,
-              date: new Date(Date.now() + num * 7 * 86400000).toISOString().split("T")[0],
-              time: "5:00 PM",
-              duration: ex.duration || "1 Hour",
-              topic: num === 1 ? "Fundamentals & Roadmap" : "Deep Dive & Hands-on Exercises",
-              mode: ex.mode || "Online",
-              meetingLink: ex.mode === "Offline" ? undefined : (ex.agreement?.meetingLink || "https://meet.google.com/sb-learn-hub"),
-              meetingLocation: ex.mode === "Offline" ? (ex.agreement?.location || "Public Library / Cafe") : undefined,
-              status: "upcoming",
-            };
-          });
-        }
         saveUserExchanges(state.exchanges);
       }
     },
     rejectRequest(state, action) {
-      const ex = state.exchanges.find((e) => e.id === action.payload);
+      const ex = state.exchanges.find((e) => e.id === action.payload || e._id === action.payload);
       if (ex) {
         ex.status = "cancelled";
         if (ex.agreement) ex.agreement.status = "cancelled";
@@ -153,7 +197,7 @@ const exchangeSlice = createSlice({
       }
     },
     cancelExchange(state, action) {
-      const ex = state.exchanges.find((e) => e.id === action.payload);
+      const ex = state.exchanges.find((e) => e.id === action.payload || e._id === action.payload);
       if (ex) {
         ex.status = "cancelled";
         if (ex.agreement) ex.agreement.status = "cancelled";
@@ -162,29 +206,16 @@ const exchangeSlice = createSlice({
     },
     completeExchangeSession(state, action) {
       const { exchangeId, sessionId } = action.payload;
-      const ex = state.exchanges.find((e) => e.id === exchangeId);
+      const ex = state.exchanges.find((e) => e.id === exchangeId || e._id === exchangeId);
       if (ex && ex.sessions) {
-        const session = ex.sessions.find((s) => s.id === sessionId);
+        const session = ex.sessions.find((s) => s.id === sessionId || s._id === sessionId);
         if (session) {
           session.status = "completed";
           const completedCount = ex.sessions.filter((s) => s.status === "completed").length;
           ex.completedSessions = completedCount;
           const total = ex.totalSessions || ex.sessions.length || 4;
           ex.progress = Math.min(100, Math.round((completedCount / total) * 100));
-
-          // update next upcoming session
-          const next = ex.sessions.find((s) => s.status === "upcoming");
-          if (next) {
-            ex.nextSession = {
-              date: next.date,
-              time: next.time,
-              skill: next.title,
-              mode: next.mode,
-              meetingLink: next.meetingLink,
-              meetingLocation: next.meetingLocation,
-            };
-          } else {
-            ex.nextSession = null;
+          if (ex.progress === 100) {
             ex.status = "completed";
             if (ex.agreement) ex.agreement.status = "completed";
           }
@@ -194,7 +225,7 @@ const exchangeSlice = createSlice({
     },
     submitExchangeReview(state, action) {
       const { exchangeId, rating, review } = action.payload;
-      const ex = state.exchanges.find((e) => e.id === exchangeId);
+      const ex = state.exchanges.find((e) => e.id === exchangeId || e._id === exchangeId);
       if (ex) {
         ex.rating = rating;
         ex.review = review;
@@ -205,36 +236,93 @@ const exchangeSlice = createSlice({
       }
     },
     completeExchange(state, action) {
-      const ex = state.exchanges.find((e) => e.id === action.payload);
+      const ex = state.exchanges.find((e) => e.id === action.payload || e._id === action.payload);
       if (ex) {
         ex.status = "completed";
         ex.progress = 100;
         if (ex.agreement) ex.agreement.status = "completed";
-        if (ex.sessions) {
-          ex.sessions.forEach((s) => {
-            s.status = "completed";
-          });
-        }
-        ex.completedSessions = ex.totalSessions || 4;
         saveUserExchanges(state.exchanges);
       }
     },
   },
   extraReducers: (builder) => {
     builder
+      // Fetch Exchanges Async
+      .addCase(fetchExchangesAsync.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchExchangesAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        if (action.payload) {
+          state.exchanges = action.payload;
+          saveUserExchanges(action.payload);
+        }
+      })
+      .addCase(fetchExchangesAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Create Exchange Async
+      .addCase(createExchangeAsync.fulfilled, (state, action) => {
+        state.exchanges.unshift(action.payload);
+        saveUserExchanges(state.exchanges);
+      })
+      // Accept Exchange Async
+      .addCase(acceptExchangeAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.exchanges = state.exchanges.map((e) => (e.id === updated.id || e._id === updated._id ? updated : e));
+        saveUserExchanges(state.exchanges);
+      })
+      // Reject Exchange Async
+      .addCase(rejectExchangeAsync.fulfilled, (state, action) => {
+        const id = action.payload;
+        state.exchanges = state.exchanges.map((e) => (e.id === id || e._id === id ? { ...e, status: "cancelled" } : e));
+        saveUserExchanges(state.exchanges);
+      })
+      // Complete Session Async
+      .addCase(completeExchangeSessionAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.exchanges = state.exchanges.map((e) => (e.id === updated.id || e._id === updated._id ? updated : e));
+        saveUserExchanges(state.exchanges);
+      })
+      // Submit Review Async
+      .addCase(submitExchangeReviewAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.exchanges = state.exchanges.map((e) => (e.id === updated.id || e._id === updated._id ? updated : e));
+        saveUserExchanges(state.exchanges);
+      })
+      // Legacy user actions
       .addCase("user/loginUser", (state, action) => {
-        const user = action.payload || { id: 1 };
-        const uid = String(user.id);
-        state.exchanges = getExchangesForUser(uid);
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.exchanges = getExchangesForUser(uid);
+        } else {
+          state.exchanges = [];
+        }
+      })
+      .addCase("user/loginUserAsync/fulfilled", (state, action) => {
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.exchanges = getExchangesForUser(uid);
+        } else {
+          state.exchanges = [];
+        }
       })
       .addCase("user/registerUser", (state, action) => {
         const { user } = action.payload || {};
-        const uid = user ? String(user.id) : Date.now().toString();
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.exchanges = [];
+          saveStorage(`skillbridge_exchanges_${uid}`, []);
+        }
+      })
+      .addCase("user/registerUserAsync/fulfilled", (state) => {
         state.exchanges = [];
-        saveStorage(`skillbridge_exchanges_${uid}`, []);
       })
       .addCase("user/logoutUser", (state) => {
-        state.exchanges = dummyExchanges;
+        state.exchanges = [];
       });
   },
 });
@@ -248,4 +336,5 @@ export const {
   completeExchangeSession,
   submitExchangeReview,
 } = exchangeSlice.actions;
+
 export default exchangeSlice.reducer;

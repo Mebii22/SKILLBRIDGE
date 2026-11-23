@@ -1,23 +1,48 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { FiGrid, FiUsers, FiList, FiFlag, FiLogOut, FiMenu } from "react-icons/fi";
+import { useSelector, useDispatch } from "react-redux";
+import {
+  FiGrid,
+  FiUsers,
+  FiList,
+  FiRepeat,
+  FiCalendar,
+  FiActivity,
+  FiLogOut,
+  FiMenu
+} from "react-icons/fi";
 import { LogoMark } from "./Navbar";
+import { logoutUser } from "../redux/slices/userSlice";
 
 const NAV = [
-  { to: "/admin/dashboard", label: "Dashboard", icon: <FiGrid /> },
+  { to: "/admin/dashboard", label: "Overview", icon: <FiGrid /> },
   { to: "/admin/users", label: "Users", icon: <FiUsers /> },
-  { to: "/admin/skills", label: "Skill Listings", icon: <FiList /> },
-  { to: "/admin/reports", label: "Reports", icon: <FiFlag /> },
+  { to: "/admin/skills", label: "Skills", icon: <FiList /> },
+  { to: "/admin/exchanges", label: "Exchanges", icon: <FiRepeat /> },
+  { to: "/admin/sessions", label: "Sessions", icon: <FiCalendar /> },
+  { to: "/admin/activity", label: "Activity", icon: <FiActivity /> },
 ];
 
 export default function AdminLayout() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const currentUser = useSelector((s) => s.user.currentUser);
 
   const logout = () => {
     localStorage.removeItem("adminLoggedIn");
+    localStorage.removeItem("token");
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("user");
+    dispatch(logoutUser());
     navigate("/admin/login");
   };
+
+  const adminName =
+    (currentUser?.role === "admin" && (!currentUser?.fullName || currentUser?.fullName === "jeny"))
+      ? "SKILLBRIDGE Admin"
+      : (currentUser?.fullName || currentUser?.name || "SKILLBRIDGE Admin");
+  const adminEmail = currentUser?.email || "admin@skillbridge.com";
 
   return (
     <div className="dash">
@@ -48,8 +73,8 @@ export default function AdminLayout() {
           <div className="side-user" style={{ background: "rgba(255,255,255,0.08)" }}>
             <span className="admin-avatar">A</span>
             <div>
-              <div className="su-name" style={{ color: "#fff" }}>Administrator</div>
-              <div className="su-mail" style={{ color: "#9a9a9a" }}>admin@skillbridge.com</div>
+              <div className="su-name" style={{ color: "#fff" }}>{adminName}</div>
+              <div className="su-mail" style={{ color: "#9a9a9a" }}>{adminEmail}</div>
             </div>
           </div>
           <button className="logout-btn" onClick={logout}>

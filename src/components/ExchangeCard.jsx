@@ -1,7 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { FiCalendar, FiArrowRight, FiCheck, FiX, FiFileText } from "react-icons/fi";
-import { acceptRequest, rejectRequest, cancelExchange } from "../redux/slices/exchangeSlice";
+import {
+  acceptRequest,
+  rejectRequest,
+  cancelExchange,
+  acceptExchangeAsync,
+  rejectExchangeAsync,
+  cancelExchangeAsync,
+} from "../redux/slices/exchangeSlice";
 import { addNotification } from "../redux/slices/notificationSlice";
 
 const LABELS = { pending: "Pending Agreement", active: "In Progress", completed: "Completed", cancelled: "Cancelled" };
@@ -10,6 +17,7 @@ export default function ExchangeCard({ ex }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  const exchangeId = ex._id || ex.id;
   const totalSessions = ex.totalSessions || 4;
   const completedSessions = ex.completedSessions || 0;
   const modeBadge = ex.mode === "Offline" ? "📍 Offline" : "🌐 Online";
@@ -46,7 +54,8 @@ export default function ExchangeCard({ ex }) {
             <button
               className="btn-xs dark"
               onClick={() => {
-                dispatch(acceptRequest(ex.id));
+                dispatch(acceptRequest(ex.id || ex._id));
+                dispatch(acceptExchangeAsync(exchangeId));
                 dispatch(addNotification({
                   type: "accepted",
                   title: "Exchange agreement accepted",
@@ -56,22 +65,36 @@ export default function ExchangeCard({ ex }) {
             >
               <FiCheck /> Accept
             </button>
-            <button className="btn-xs danger" onClick={() => dispatch(rejectRequest(ex.id))}>
+            <button
+              className="btn-xs danger"
+              onClick={() => {
+                dispatch(rejectRequest(ex.id || ex._id));
+                dispatch(rejectExchangeAsync(exchangeId));
+              }}
+            >
               <FiX /> Reject
             </button>
-            <button className="btn-xs" onClick={() => navigate(`/exchanges/${ex.id}`)}>
+            <button className="btn-xs" onClick={() => navigate(`/exchanges/${exchangeId}`)}>
               <FiFileText /> Agreement
             </button>
           </>
         )}
         {ex.status === "active" && (
           <>
-            <button className="btn-xs dark" onClick={() => navigate(`/exchanges/${ex.id}`)}>View Details</button>
-            <button className="btn-xs danger" onClick={() => dispatch(cancelExchange(ex.id))}>Cancel</button>
+            <button className="btn-xs dark" onClick={() => navigate(`/exchanges/${exchangeId}`)}>View Details</button>
+            <button
+              className="btn-xs danger"
+              onClick={() => {
+                dispatch(cancelExchange(ex.id || ex._id));
+                dispatch(cancelExchangeAsync(exchangeId));
+              }}
+            >
+              Cancel
+            </button>
           </>
         )}
         {ex.status === "completed" && (
-          <button className="btn-xs" onClick={() => navigate(`/exchanges/${ex.id}`)}>
+          <button className="btn-xs" onClick={() => navigate(`/exchanges/${exchangeId}`)}>
             View Details <FiArrowRight />
           </button>
         )}

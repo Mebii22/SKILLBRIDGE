@@ -33,6 +33,10 @@ export default function DashboardLayout() {
   const userPhoto = user?.photo || "https://randomuser.me/api/portraits/men/22.jpg";
 
   const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userLoggedIn");
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("user");
     dispatch(logoutUser());
     navigate("/");
   };
@@ -79,10 +83,6 @@ export default function DashboardLayout() {
       <main className="dash-main" style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <div className="topbar">
           <button className="menu-btn" onClick={() => setOpen(true)} aria-label="Open menu"><FiMenu /></button>
-          <div className="top-search" onClick={() => navigate("/discover")} style={{ cursor: "pointer" }}>
-            <FiSearch />
-            <input placeholder="Search skills or people…" readOnly />
-          </div>
           <div className="top-actions">
             <Link to="/notifications" className="top-icon" title="Notifications">
               <FiBell />

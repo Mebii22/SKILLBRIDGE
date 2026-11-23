@@ -1,15 +1,8 @@
-import { createSlice } from "@reduxjs/toolkit";
-import {
-  skillListings as dummySkillListings,
-  reports as dummyReports,
-  activities as dummyActivities,
-} from "../../data/dummyData.js";
-
-const isBrowser = typeof localStorage !== "undefined";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import API from "../../api/client.js";
 
 const loadStorage = (key, fallback) => {
   try {
-    if (!isBrowser) return fallback;
     const val = localStorage.getItem(key);
     return val ? JSON.parse(val) : fallback;
   } catch {
@@ -19,89 +12,219 @@ const loadStorage = (key, fallback) => {
 
 const saveStorage = (key, val) => {
   try {
-    if (isBrowser) {
-      localStorage.setItem(key, JSON.stringify(val));
-    }
+    localStorage.setItem(key, JSON.stringify(val));
   } catch (e) {
     console.error(e);
   }
 };
 
-const initialSkillListings = (() => {
-  const existing = loadStorage("skillbridge_skill_listings", null);
-  if (existing && Array.isArray(existing)) return existing;
-  saveStorage("skillbridge_skill_listings", dummySkillListings);
-  return dummySkillListings;
-})();
+// ASYNC THUNKS
+export const fetchAdminStatsAsync = createAsyncThunk("admin/fetchStatsAsync", async (_, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/stats");
+    return res.data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch admin stats");
+  }
+});
 
-const initialReports = (() => {
-  const existing = loadStorage("skillbridge_reports", null);
-  if (existing && Array.isArray(existing)) return existing;
-  saveStorage("skillbridge_reports", dummyReports);
-  return dummyReports;
-})();
+export const fetchAdminUsersAsync = createAsyncThunk("admin/fetchUsersAsync", async (params = {}, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/users", { params });
+    return res.data.users;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch users");
+  }
+});
 
-const initialActivities = (() => {
-  const existing = loadStorage("skillbridge_activities", null);
-  if (existing && Array.isArray(existing)) return existing;
-  saveStorage("skillbridge_activities", dummyActivities);
-  return dummyActivities;
-})();
+export const toggleAdminUserStatusAsync = createAsyncThunk("admin/toggleUserStatusAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.patch(`/admin/users/${id}/status`);
+    return res.data.user;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to update user status");
+  }
+});
+
+export const deleteAdminUserAsync = createAsyncThunk("admin/deleteUserAsync", async ({ id, reason }, { rejectWithValue }) => {
+  try {
+    await API.delete(`/admin/users/${id}`, { data: { reason } });
+    return id;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to delete user");
+  }
+});
+
+export const fetchAdminSkillsAsync = createAsyncThunk("admin/fetchSkillsAsync", async (params = {}, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/skills", { params });
+    return res.data.skills;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch admin skills");
+  }
+});
+
+export const approveSkillAsync = createAsyncThunk("admin/approveSkillAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.patch(`/admin/skills/${id}/approve`);
+    return res.data.skill;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to approve skill");
+  }
+});
+
+export const removeSkillAsync = createAsyncThunk("admin/removeSkillAsync", async (payload, { rejectWithValue }) => {
+  try {
+    let res;
+    if (typeof payload === "object" && payload !== null) {
+      const { id, userId, skill, type, reason } = payload;
+      const skillName = typeof skill === "object" && skill !== null
+        ? (skill.skill || skill.name || skill.title || skill.label || "")
+        : String(skill || "");
+
+      res = await API.delete("/admin/skills", {
+        data: { id, userId, skill: skillName, type, reason }
+      });
+
+      return {
+        id,
+        userId: res.data?.userId || userId,
+        type: res.data?.type || type,
+        ...res.data,
+        skill: res.data?.removedSkill || skillName
+      };
+    } else {
+      res = await API.delete(`/admin/skills/${payload}`);
+      return res.data?.skill || { id: payload, _id: payload };
+    }
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to remove skill");
+  }
+});
+
+export const restoreSkillAsync = createAsyncThunk("admin/restoreSkillAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.patch(`/admin/skills/${id}/restore`);
+    return res.data.skill;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to restore skill");
+  }
+});
+
+export const fetchAdminExchangesAsync = createAsyncThunk("admin/fetchExchangesAsync", async (params = {}, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/exchanges", { params });
+    return res.data.exchanges;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch platform exchanges");
+  }
+});
+
+export const fetchAdminSessionsAsync = createAsyncThunk("admin/fetchSessionsAsync", async (params = {}, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/sessions", { params });
+    return res.data.sessions;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch platform sessions");
+  }
+});
+
+export const fetchAdminActivitiesAsync = createAsyncThunk("admin/fetchActivitiesAsync", async (_, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/activities");
+    return res.data.activities;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch admin activity history");
+  }
+});
+
+export const fetchAdminReportsAsync = createAsyncThunk("admin/fetchReportsAsync", async (_, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/admin/reports");
+    return res.data.reports;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch reports");
+  }
+});
+
+export const reviewReportAsync = createAsyncThunk("admin/reviewReportAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.patch(`/admin/reports/${id}/review`);
+    return res.data.report;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to review report");
+  }
+});
+
+export const resolveReportAsync = createAsyncThunk("admin/resolveReportAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.patch(`/admin/reports/${id}/resolve`);
+    return res.data.report;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to resolve report");
+  }
+});
+
+export const addSkillListingAsync = createAsyncThunk("admin/addSkillListingAsync", async (payload, { rejectWithValue }) => {
+  try {
+    const res = await API.post("/skills", payload);
+    return res.data.skill;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to share skill");
+  }
+});
 
 const adminSlice = createSlice({
   name: "admin",
   initialState: {
-    skillListings: initialSkillListings,
-    reports: initialReports,
-    activities: initialActivities,
+    users: [],
+    skillListings: [],
+    reports: [],
+    activities: [],
+    platformExchanges: [],
+    platformSessions: [],
+    stats: {
+      totalUsers: 0,
+      activeUsers: 0,
+      disabledUsers: 0,
+      totalSkills: 0,
+      totalExchanges: 0,
+      pendingExchanges: 0,
+      completedExchanges: 0,
+      activeExchanges: 0,
+      totalSessions: 0,
+      openReports: 0,
+    },
+    loading: false,
+    error: null,
   },
   reducers: {
     approveSkill(state, action) {
-      const listing = state.skillListings.find((l) => l.id === action.payload);
+      const listing = state.skillListings.find((l) => l.id === action.payload || l._id === action.payload);
       if (listing) {
         listing.status = "approved";
-        state.activities.unshift({
-          text: `Skill listing '${listing.skill}' was approved by admin`,
-          time: "Just now",
-        });
-        saveStorage("skillbridge_skill_listings", state.skillListings);
-        saveStorage("skillbridge_activities", state.activities);
       }
     },
     removeSkill(state, action) {
-      const listing = state.skillListings.find((l) => l.id === action.payload);
-      state.skillListings = state.skillListings.filter((l) => l.id !== action.payload);
+      const listing = state.skillListings.find((l) => l.id === action.payload || l._id === action.payload);
       if (listing) {
-        state.activities.unshift({
-          text: `Skill listing '${listing.skill}' was removed by admin`,
-          time: "Just now",
-        });
+        listing.status = "removed";
       }
-      saveStorage("skillbridge_skill_listings", state.skillListings);
-      saveStorage("skillbridge_activities", state.activities);
     },
     reviewReport(state, action) {
-      const report = state.reports.find((r) => r.id === action.payload);
+      const report = state.reports.find((r) => r.id === action.payload || r._id === action.payload);
       if (report) {
         report.status = "reviewed";
-        saveStorage("skillbridge_reports", state.reports);
       }
     },
     resolveReport(state, action) {
-      const report = state.reports.find((r) => r.id === action.payload);
+      const report = state.reports.find((r) => r.id === action.payload || r._id === action.payload);
       if (report) {
         report.status = "resolved";
-        state.activities.unshift({
-          text: `Report #${report.id} on '${report.target}' was resolved by admin`,
-          time: "Just now",
-        });
-        saveStorage("skillbridge_reports", state.reports);
-        saveStorage("skillbridge_activities", state.activities);
       }
     },
     removeReport(state, action) {
-      state.reports = state.reports.filter((r) => r.id !== action.payload);
-      saveStorage("skillbridge_reports", state.reports);
+      state.reports = state.reports.filter((r) => r.id !== action.payload && r._id !== action.payload);
     },
     addSkillListing(state, action) {
       state.skillListings.unshift({
@@ -109,13 +232,174 @@ const adminSlice = createSlice({
         status: "approved",
         ...action.payload,
       });
-      state.activities.unshift({
-        text: `New skill listing '${action.payload.skill}' published by ${action.payload.user}`,
-        time: "Just now",
-      });
-      saveStorage("skillbridge_skill_listings", state.skillListings);
-      saveStorage("skillbridge_activities", state.activities);
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      // Fetch Stats
+      .addCase(fetchAdminStatsAsync.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAdminStatsAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.stats = action.payload.stats || state.stats;
+        state.platformExchanges = action.payload.exchanges || [];
+        if (action.payload.activities && action.payload.activities.length) {
+          state.activities = action.payload.activities;
+        }
+      })
+      .addCase(fetchAdminStatsAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Fetch Admin Users
+      .addCase(fetchAdminUsersAsync.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchAdminUsersAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.users = action.payload || [];
+      })
+      .addCase(fetchAdminUsersAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Toggle User Status
+      .addCase(toggleAdminUserStatusAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (updated) {
+          state.users = state.users.map((u) =>
+            (u.id === updated.id || u._id === updated._id ? { ...u, status: updated.status } : u)
+          );
+        }
+      })
+      // Delete User Permanent
+      .addCase(deleteAdminUserAsync.fulfilled, (state, action) => {
+        const id = action.payload;
+        state.users = state.users.filter((u) => u.id !== id && u._id !== id);
+      })
+      // Fetch Skills
+      .addCase(fetchAdminSkillsAsync.fulfilled, (state, action) => {
+        state.skillListings = action.payload || [];
+      })
+      // Approve Skill
+      .addCase(approveSkillAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (updated) {
+          state.skillListings = state.skillListings.map((s) =>
+            (s.id === updated.id || s._id === updated._id ? updated : s)
+          );
+        }
+      })
+      // Remove Skill
+      .addCase(removeSkillAsync.fulfilled, (state, action) => {
+        const item = action.payload;
+        if (item) {
+          const getCleanStr = (val) => {
+            if (!val) return "";
+            if (typeof val === "string") return val.trim().toLowerCase();
+            if (typeof val === "object") {
+              const nested = val.skill || val.name || val.title || val.label || "";
+              return String(nested).trim().toLowerCase();
+            }
+            return String(val).trim().toLowerCase();
+          };
+
+          const targetSkill = getCleanStr(item.skill || item.removedSkill);
+          const targetUserId = item.userId ? String(item.userId) : null;
+          const targetType = item.type ? String(item.type).toLowerCase() : null;
+          const targetId = item.id || item._id;
+
+          state.skillListings = state.skillListings.filter((s) => {
+            if (!s) return false;
+            // Match by unique item id if available
+            if (targetId && (s.id === targetId || s._id === targetId)) return false;
+
+            // Match by userId and skill name (and type if present)
+            if (targetUserId && targetSkill) {
+              const sUserId = s.userId ? String(s.userId) : null;
+              const sSkill = getCleanStr(s.skill);
+              const sType = s.type ? String(s.type).toLowerCase() : null;
+
+              if (sUserId === targetUserId && sSkill === targetSkill) {
+                if (!targetType || !sType || targetType === sType) {
+                  return false;
+                }
+              }
+            }
+            return true;
+          });
+        }
+      })
+      // Restore Skill
+      .addCase(restoreSkillAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (updated) {
+          state.skillListings = state.skillListings.map((s) =>
+            (s.id === updated.id || s._id === updated._id ? updated : s)
+          );
+        }
+      })
+      // Fetch Admin Exchanges
+      .addCase(fetchAdminExchangesAsync.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchAdminExchangesAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.platformExchanges = action.payload || [];
+      })
+      .addCase(fetchAdminExchangesAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Fetch Admin Sessions
+      .addCase(fetchAdminSessionsAsync.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchAdminSessionsAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.platformSessions = action.payload || [];
+      })
+      .addCase(fetchAdminSessionsAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Fetch Activities
+      .addCase(fetchAdminActivitiesAsync.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAdminActivitiesAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.activities = action.payload || [];
+      })
+      .addCase(fetchAdminActivitiesAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Fetch Reports
+      .addCase(fetchAdminReportsAsync.fulfilled, (state, action) => {
+        state.reports = action.payload || [];
+      })
+      // Review Report
+      .addCase(reviewReportAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (updated) {
+          state.reports = state.reports.map((r) => (r.id === updated.id || r._id === updated._id ? updated : r));
+        }
+      })
+      // Resolve Report
+      .addCase(resolveReportAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        if (updated) {
+          state.reports = state.reports.map((r) => (r.id === updated.id || r._id === updated._id ? updated : r));
+        }
+      })
+      // Add Skill Listing
+      .addCase(addSkillListingAsync.fulfilled, (state, action) => {
+        state.skillListings.unshift(action.payload);
+      });
   },
 });
 

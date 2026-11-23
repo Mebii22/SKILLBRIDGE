@@ -1,4 +1,5 @@
-import { createSlice } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import API from "../../api/client.js";
 import { conversations as dummyConversations } from "../../data/dummyData.js";
 
 const loadStorage = (key, fallback) => {
@@ -20,27 +21,59 @@ const saveStorage = (key, val) => {
 
 const getUserId = () => {
   const u = loadStorage("currentUser", null);
-  return u ? String(u.id) : "1";
+  return u ? String(u.id || u._id) : null;
 };
 
 const getConversationsForUser = (userId) => {
-  if (!userId || userId === "1") {
-    const existing = loadStorage("skillbridge_conversations_1", null) || loadStorage("skillbridge_conversations", null);
-    if (existing && Array.isArray(existing)) return existing;
-    saveStorage("skillbridge_conversations_1", dummyConversations);
-    saveStorage("skillbridge_conversations", dummyConversations);
-    return dummyConversations;
-  }
-  return loadStorage(`skillbridge_conversations_${userId}`, []);
+  if (!userId) return [];
+  const existing = loadStorage(`skillbridge_conversations_${userId}`, null);
+  if (existing && Array.isArray(existing)) return existing;
+  return [];
 };
 
 const saveUserConversations = (conversations) => {
   const uid = getUserId();
-  saveStorage(`skillbridge_conversations_${uid}`, conversations);
-  if (uid === "1") {
-    saveStorage("skillbridge_conversations", conversations);
+  if (uid) {
+    saveStorage(`skillbridge_conversations_${uid}`, conversations);
   }
 };
+
+// ASYNC THUNKS
+export const fetchConversationsAsync = createAsyncThunk("messages/fetchConversationsAsync", async (_, { rejectWithValue }) => {
+  try {
+    const res = await API.get("/messages/conversations");
+    return res.data.conversations;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to fetch conversations");
+  }
+});
+
+export const startConversationAsync = createAsyncThunk("messages/startConversationAsync", async (payload, { rejectWithValue }) => {
+  try {
+    const res = await API.post("/messages/conversations", payload);
+    return res.data.conversation;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to start conversation");
+  }
+});
+
+export const sendMessageAsync = createAsyncThunk("messages/sendMessageAsync", async ({ conversationId, text }, { rejectWithValue }) => {
+  try {
+    const res = await API.post(`/messages/conversations/${conversationId}/messages`, { text });
+    return res.data.conversation;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to send message");
+  }
+});
+
+export const markConversationReadAsync = createAsyncThunk("messages/markConversationReadAsync", async (conversationId, { rejectWithValue }) => {
+  try {
+    await API.put(`/messages/conversations/${conversationId}/read`);
+    return conversationId;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to mark as read");
+  }
+});
 
 const initialConversations = (() => {
   const uid = getUserId();
@@ -49,18 +82,24 @@ const initialConversations = (() => {
 
 const messageSlice = createSlice({
   name: "messages",
-  initialState: { conversations: initialConversations },
+  initialState: {
+    conversations: initialConversations,
+    loading: false,
+    error: null,
+  },
   reducers: {
     sendMessage(state, action) {
       const { conversationId, text, from = "me" } = action.payload;
-      const convo = state.conversations.find((c) => c.id === conversationId);
+      const convo = state.conversations.find((c) => c.id === conversationId || c._id === conversationId);
       if (convo) {
+        if (!convo.messages) convo.messages = [];
         convo.messages.push({
           from,
           text,
           time: "Now",
         });
         convo.time = "Now";
+        convo.lastMessage = text;
         saveUserConversations(state.conversations);
       }
     },
@@ -76,7 +115,7 @@ const messageSlice = createSlice({
           time: "Just now",
           messages: initialMessage
             ? [{ from: "me", text: initialMessage, time: "Just now" }]
-            : [{ from: "them", text: `Hi! Thanks for connecting. What skill would you like to explore first?`, time: "Just now" }],
+            : [],
         };
         state.conversations.unshift(convo);
       }
@@ -85,19 +124,70 @@ const messageSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch Conversations Async
+      .addCase(fetchConversationsAsync.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchConversationsAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        if (action.payload) {
+          state.conversations = action.payload;
+          saveUserConversations(action.payload);
+        }
+      })
+      .addCase(fetchConversationsAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Start Conversation Async
+      .addCase(startConversationAsync.fulfilled, (state, action) => {
+        const convo = action.payload;
+        const exists = state.conversations.find((c) => c.id === convo.id || c._id === convo._id);
+        if (!exists) {
+          state.conversations.unshift(convo);
+        } else {
+          state.conversations = state.conversations.map((c) => (c.id === convo.id || c._id === convo._id ? convo : c));
+        }
+        saveUserConversations(state.conversations);
+      })
+      // Send Message Async
+      .addCase(sendMessageAsync.fulfilled, (state, action) => {
+        const updated = action.payload;
+        state.conversations = state.conversations.map((c) => (c.id === updated.id || c._id === updated._id ? updated : c));
+        saveUserConversations(state.conversations);
+      })
+      // Legacy user actions
       .addCase("user/loginUser", (state, action) => {
-        const user = action.payload || { id: 1 };
-        const uid = String(user.id);
-        state.conversations = getConversationsForUser(uid);
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.conversations = getConversationsForUser(uid);
+        } else {
+          state.conversations = [];
+        }
+      })
+      .addCase("user/loginUserAsync/fulfilled", (state, action) => {
+        const user = action.payload;
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.conversations = getConversationsForUser(uid);
+        } else {
+          state.conversations = [];
+        }
       })
       .addCase("user/registerUser", (state, action) => {
         const { user } = action.payload || {};
-        const uid = user ? String(user.id) : Date.now().toString();
+        if (user) {
+          const uid = String(user.id || user._id);
+          state.conversations = [];
+          saveStorage(`skillbridge_conversations_${uid}`, []);
+        }
+      })
+      .addCase("user/registerUserAsync/fulfilled", (state) => {
         state.conversations = [];
-        saveStorage(`skillbridge_conversations_${uid}`, []);
       })
       .addCase("user/logoutUser", (state) => {
-        state.conversations = dummyConversations;
+        state.conversations = [];
       });
   },
 });

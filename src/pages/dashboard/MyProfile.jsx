@@ -2,12 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { FiCheck, FiCamera, FiUpload, FiInstagram, FiTwitter, FiLinkedin, FiGithub } from "react-icons/fi";
 import SkillTag from "../../components/SkillTag";
-import { updateUser } from "../../redux/slices/userSlice";
+import { updateUser, updateUserAsync, fetchMeAsync } from "../../redux/slices/userSlice";
+import { fetchNotificationsAsync } from "../../redux/slices/notificationSlice";
 
 export default function MyProfile() {
   const user = useSelector((s) => s.user.currentUser);
   const dispatch = useDispatch();
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    dispatch(fetchMeAsync());
+  }, [dispatch]);
 
   const [form, setForm] = useState({
     fullName: user?.fullName || user?.name || "",
@@ -25,6 +30,7 @@ export default function MyProfile() {
     github: user?.socials?.github || "",
   });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -65,34 +71,45 @@ export default function MyProfile() {
     }
   };
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
+    if (saving) return;
+
     const cleanTeaches = form.teaches.split(",").map((s) => s.trim()).filter(Boolean);
     const cleanWants = form.wants.split(",").map((s) => s.trim()).filter(Boolean);
     const firstName = form.fullName.trim().split(" ")[0] || "Learner";
 
-    dispatch(
-      updateUser({
-        fullName: form.fullName.trim(),
-        name: firstName,
-        location: form.location.trim(),
-        city: form.city.trim() || form.location.split(",")[0].trim(),
-        bio: form.bio.trim(),
-        photo: form.photo.trim(),
-        mode: form.mode,
-        availability: form.availability.trim(),
-        teaches: cleanTeaches,
-        wants: cleanWants,
-        socials: {
-          instagram: form.instagram.trim(),
-          twitter: form.twitter.trim(),
-          linkedin: form.linkedin.trim(),
-          github: form.github.trim(),
-        },
-      })
-    );
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2600);
+    const updatedProfile = {
+      fullName: form.fullName.trim(),
+      name: firstName,
+      location: form.location.trim(),
+      city: form.city.trim() || form.location.split(",")[0].trim(),
+      bio: form.bio.trim(),
+      photo: form.photo.trim(),
+      mode: form.mode,
+      availability: form.availability.trim(),
+      teaches: cleanTeaches,
+      wants: cleanWants,
+      socials: {
+        instagram: form.instagram.trim(),
+        twitter: form.twitter.trim(),
+        linkedin: form.linkedin.trim(),
+        github: form.github.trim(),
+      },
+    };
+
+    setSaving(true);
+    try {
+      const res = await dispatch(updateUserAsync(updatedProfile));
+      if (updateUserAsync.fulfilled.match(res)) {
+        dispatch(updateUser(res.payload?.user || updatedProfile));
+        dispatch(fetchNotificationsAsync());
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2600);
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -249,8 +266,8 @@ export default function MyProfile() {
             </div>
           </div>
 
-          <button type="submit" className="btn btn-dark" style={{ marginTop: 16 }}>
-            <FiCamera /> Save Changes
+          <button type="submit" className="btn btn-dark" style={{ marginTop: 16 }} disabled={saving}>
+            <FiCamera /> {saving ? "Saving..." : "Save Changes"}
           </button>
         </form>
       </div>

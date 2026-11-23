@@ -1,10 +1,12 @@
 import { useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { FiEye, FiEyeOff, FiUpload, FiCheck } from "react-icons/fi";
+import { useDispatch } from "react-redux";
+import { FiEye, FiEyeOff, FiUpload, FiPlus, FiX } from "react-icons/fi";
 import DoodleIllustration from "../components/DoodleIllustration";
-import { registerUser } from "../redux/slices/userSlice";
-import { addNotification } from "../redux/slices/notificationSlice";
+import { registerUserAsync } from "../redux/slices/userSlice";
+
+const SUGGESTED_TEACH = ["React", "JavaScript", "HTML/CSS", "UI Design", "Python", "Photography", "English"];
+const SUGGESTED_WANT = ["Node.js", "MongoDB", "German", "Graphic Design", "Video Editing", "Public Speaking", "Spanish"];
 
 export default function Register() {
   const [form, setForm] = useState({
@@ -16,17 +18,56 @@ export default function Register() {
     bio: "",
     mode: "Both", // "Online", "Offline", "Both"
     photo: "",
+    teaches: [],
+    wants: [],
   });
+
+  const [teachInput, setTeachInput] = useState("");
+  const [wantInput, setWantInput] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef(null);
-  const existingUsers = useSelector((s) => s.user.users);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
   const set = (key) => (e) => {
     setForm({ ...form, [key]: e.target.value });
-    setErrors({ ...errors, [key]: undefined });
+    setErrors({ ...errors, [key]: undefined, general: undefined });
+  };
+
+  // Skill management: Teaches
+  const addTeachSkill = (skill) => {
+    const clean = (skill || "").trim();
+    if (!clean) return;
+    if (form.teaches.some((s) => s.toLowerCase() === clean.toLowerCase())) {
+      setErrors((prev) => ({ ...prev, teaches: `"${clean}" is already in your teaching list.` }));
+      return;
+    }
+    setForm((prev) => ({ ...prev, teaches: [...prev.teaches, clean] }));
+    setTeachInput("");
+    setErrors((prev) => ({ ...prev, teaches: undefined }));
+  };
+
+  const removeTeachSkill = (skill) => {
+    setForm((prev) => ({ ...prev, teaches: prev.teaches.filter((s) => s !== skill) }));
+  };
+
+  // Skill management: Wants
+  const addWantSkill = (skill) => {
+    const clean = (skill || "").trim();
+    if (!clean) return;
+    if (form.wants.some((s) => s.toLowerCase() === clean.toLowerCase())) {
+      setErrors((prev) => ({ ...prev, wants: `"${clean}" is already in your learning list.` }));
+      return;
+    }
+    setForm((prev) => ({ ...prev, wants: [...prev.wants, clean] }));
+    setWantInput("");
+    setErrors((prev) => ({ ...prev, wants: undefined }));
+  };
+
+  const removeWantSkill = (skill) => {
+    setForm((prev) => ({ ...prev, wants: prev.wants.filter((s) => s !== skill) }));
   };
 
   const handleDeviceImage = (e) => {
@@ -47,7 +88,7 @@ export default function Register() {
     }
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const errs = {};
     if (form.name.trim().length < 3) errs.name = "Please enter your full name.";
@@ -56,64 +97,54 @@ export default function Register() {
     if (form.confirm !== form.password) errs.confirm = "Passwords do not match.";
     if (!form.city.trim()) errs.city = "Please enter your city.";
     if (!form.bio.trim()) errs.bio = "Please write a short bio about what you know and want to learn.";
-
-    const emailKey = form.email.trim().toLowerCase();
-    let storedAccounts = [];
-    try {
-      storedAccounts = JSON.parse(localStorage.getItem("skillbridge_registered_accounts") || "[]");
-    } catch {
-      storedAccounts = [];
-    }
-
-    const emailExistsInAccounts = storedAccounts.some((a) => a.email.toLowerCase() === emailKey);
-    const emailExistsInUsers = (existingUsers || []).some((u) => u.email && u.email.toLowerCase() === emailKey);
-
-    if (emailExistsInAccounts || emailExistsInUsers) {
-      errs.email = "An account with this email already exists.";
-    }
+    if (!form.teaches || form.teaches.length === 0) errs.teaches = "Please add at least one skill you can teach.";
+    if (!form.wants || form.wants.length === 0) errs.wants = "Please add at least one skill you want to learn.";
 
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
+    const emailKey = form.email.trim().toLowerCase();
     const fullName = form.name.trim();
     const firstName = fullName.split(" ")[0];
     const defaultAvatar = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80";
 
-    const newUser = {
-      id: Date.now(),
+    const userPayload = {
       name: firstName,
       fullName: fullName,
       email: emailKey,
-      location: `${form.city.trim()}, Kerala`,
+      password: form.password,
       city: form.city.trim(),
-      photo: form.photo || defaultAvatar,
+      location: `${form.city.trim()}, Kerala`,
       bio: form.bio.trim(),
       mode: form.mode,
-      rating: 5.0,
-      completed: 0,
-      teaches: ["Web Development"],
-      wants: ["German"],
-      match: 95,
-      category: "Technology",
-      joined: new Date().toISOString().split("T")[0],
-      status: "Active",
-      reviews: [],
-      socials: {
-        instagram: "",
-        twitter: "",
-        linkedin: "",
-        github: "",
-      },
+      photo: form.photo || defaultAvatar,
+      teaches: form.teaches,
+      wants: form.wants,
     };
 
-    dispatch(
-      registerUser({
-        account: { email: emailKey, password: form.password },
-        user: newUser,
-      })
-    );
-
-    navigate("/dashboard");
+    setSubmitting(true);
+    try {
+      const resultAction = await dispatch(registerUserAsync(userPayload));
+      if (registerUserAsync.fulfilled.match(resultAction)) {
+        setSubmitting(false);
+        navigate("/login", {
+          state: {
+            registeredMessage: "Account created successfully! Please log in with your email and password."
+          }
+        });
+      } else {
+        setSubmitting(false);
+        const errMsg = resultAction.payload || "Registration failed. Please try again.";
+        if (errMsg.toLowerCase().includes("email")) {
+          setErrors({ email: errMsg });
+        } else {
+          setErrors({ general: errMsg });
+        }
+      }
+    } catch {
+      setSubmitting(false);
+      setErrors({ general: "Failed to connect to the registration service. Please verify backend is running." });
+    }
   };
 
   return (
@@ -122,6 +153,12 @@ export default function Register() {
         <form className="auth-form" onSubmit={submit} noValidate style={{ maxWidth: 440 }}>
           <h1>Create your account</h1>
           <p className="auth-sub">Start sharing what you know.</p>
+
+          {errors.general && (
+            <div className="error-text" style={{ padding: "8px 12px", background: "#fef2f2", borderRadius: 8, marginBottom: 12 }}>
+              {errors.general}
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="name">Full Name</label>
@@ -152,6 +189,140 @@ export default function Register() {
               onChange={set("bio")}
             />
             {errors.bio && <div className="error-text">{errors.bio}</div>}
+          </div>
+
+          {/* Skills I Can Teach */}
+          <div className="field">
+            <label htmlFor="teachInput">Skills I Can Teach</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                id="teachInput"
+                type="text"
+                className="input"
+                placeholder="e.g. React, Python, UI Design"
+                value={teachInput}
+                onChange={(e) => setTeachInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTeachSkill(teachInput);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-dark btn-xs"
+                style={{ flexShrink: 0 }}
+                onClick={() => addTeachSkill(teachInput)}
+              >
+                <FiPlus /> Add
+              </button>
+            </div>
+
+            {/* Selected teaching skills */}
+            {form.teaches.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {form.teaches.map((s) => (
+                  <span key={s} className="tag yellow" style={{ padding: "4px 10px", fontSize: 12 }}>
+                    {s}
+                    <button
+                      type="button"
+                      onClick={() => removeTeachSkill(s)}
+                      style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 4, display: "inline-flex", alignItems: "center", color: "var(--ink)" }}
+                      aria-label={`Remove ${s}`}
+                    >
+                      <FiX size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Suggestions for Teach */}
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontSize: 11.5, color: "var(--ink-light)", marginRight: 6 }}>Suggested:</span>
+              <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                {SUGGESTED_TEACH.filter((s) => !form.teaches.includes(s)).slice(0, 4).map((s) => (
+                  <button
+                    type="button"
+                    key={s}
+                    className="btn btn-xs"
+                    style={{ padding: "2px 8px", fontSize: 11, background: "var(--surface)", border: "1px solid var(--border)" }}
+                    onClick={() => addTeachSkill(s)}
+                  >
+                    + {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {errors.teaches && <div className="error-text">{errors.teaches}</div>}
+          </div>
+
+          {/* Skills I Want to Learn */}
+          <div className="field">
+            <label htmlFor="wantInput">Skills I Want to Learn</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                id="wantInput"
+                type="text"
+                className="input"
+                placeholder="e.g. Node.js, German, Guitar"
+                value={wantInput}
+                onChange={(e) => setWantInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addWantSkill(wantInput);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-dark btn-xs"
+                style={{ flexShrink: 0 }}
+                onClick={() => addWantSkill(wantInput)}
+              >
+                <FiPlus /> Add
+              </button>
+            </div>
+
+            {/* Selected learning skills */}
+            {form.wants.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {form.wants.map((s) => (
+                  <span key={s} className="tag" style={{ padding: "4px 10px", fontSize: 12 }}>
+                    {s}
+                    <button
+                      type="button"
+                      onClick={() => removeWantSkill(s)}
+                      style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 4, display: "inline-flex", alignItems: "center", color: "var(--ink)" }}
+                      aria-label={`Remove ${s}`}
+                    >
+                      <FiX size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Suggestions for Want */}
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontSize: 11.5, color: "var(--ink-light)", marginRight: 6 }}>Suggested:</span>
+              <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                {SUGGESTED_WANT.filter((s) => !form.wants.includes(s)).slice(0, 4).map((s) => (
+                  <button
+                    type="button"
+                    key={s}
+                    className="btn btn-xs"
+                    style={{ padding: "2px 8px", fontSize: 11, background: "var(--surface)", border: "1px solid var(--border)" }}
+                    onClick={() => addWantSkill(s)}
+                  >
+                    + {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {errors.wants && <div className="error-text">{errors.wants}</div>}
           </div>
 
           {/* Exchange Mode Preference */}
@@ -241,7 +412,9 @@ export default function Register() {
             {errors.confirm && <div className="error-text">{errors.confirm}</div>}
           </div>
 
-          <button type="submit" className="btn btn-dark btn-block">Create Account</button>
+          <button type="submit" className="btn btn-dark btn-block" disabled={submitting}>
+            {submitting ? "Creating Account..." : "Create Account"}
+          </button>
 
           <p className="auth-alt">
             Already have an account? <Link to="/login" className="link">Login</Link>

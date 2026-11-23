@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { FiPlus, FiCheck, FiArrowLeft, FiGlobe, FiClock, FiMapPin, FiAward } from "react-icons/fi";
+import { FiPlus, FiArrowLeft, FiGlobe, FiClock, FiMapPin } from "react-icons/fi";
 import { CATEGORIES, SKILLS } from "../../data/dummyData";
-import { updateUser } from "../../redux/slices/userSlice";
-import { addSkillListing } from "../../redux/slices/adminSlice";
+import { updateUser, updateUserAsync } from "../../redux/slices/userSlice";
+import { addSkillListing, addSkillListingAsync } from "../../redux/slices/adminSlice";
 import { addNotification } from "../../redux/slices/notificationSlice";
 
 const LEVELS = ["Beginner Friendly", "Intermediate", "Advanced / Expert"];
@@ -15,8 +15,8 @@ export default function ShareSkill() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
-    name: currentUser?.fullName || currentUser?.name || "Mebin Joseph",
-    city: currentUser?.city || "Kochi",
+    name: currentUser?.fullName || currentUser?.name || "",
+    city: currentUser?.city || "",
     bio: currentUser?.bio || "Passionate learner on SkillBridge. Looking forward to exchanging skills with the community!",
     teachSkill: (currentUser?.teaches && currentUser.teaches[0]) || SKILLS[0],
     teachCategory: currentUser?.category || "Technology",
@@ -29,13 +29,29 @@ export default function ShareSkill() {
   });
 
   const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setForm((prev) => ({
+        ...prev,
+        name: currentUser.fullName || currentUser.name || prev.name,
+        city: currentUser.city || prev.city,
+        bio: currentUser.bio || prev.bio,
+        teachSkill: (currentUser.teaches && currentUser.teaches[0]) || prev.teachSkill,
+        wantSkill: (currentUser.wants && currentUser.wants[0]) || prev.wantSkill,
+        mode: currentUser.mode || prev.mode,
+        availability: currentUser.availability || prev.availability,
+      }));
+    }
+  }, [currentUser]);
 
   const set = (key) => (e) => {
     setForm({ ...form, [key]: e.target.value });
     setErrors({ ...errors, [key]: undefined });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = {};
     if (!form.teachSkill.trim()) errs.teachSkill = "Please provide the skill you can teach.";
@@ -63,30 +79,39 @@ export default function ShareSkill() {
       wants: cleanWants,
     };
 
-    // Update Redux state
-    dispatch(updateUser(updatedUser));
+    const skillPayload = {
+      user: form.name.trim(),
+      userPhoto: currentUser?.photo || "https://randomuser.me/api/portraits/men/22.jpg",
+      skill: form.teachSkill.trim(),
+      category: form.teachCategory,
+      mode: form.mode,
+      level: form.teachLevel,
+    };
 
-    // Also register skill listing with admin dashboard
-    dispatch(
-      addSkillListing({
-        user: form.name.trim(),
-        userPhoto: currentUser?.photo || "https://randomuser.me/api/portraits/men/22.jpg",
-        skill: form.teachSkill.trim(),
-        category: form.teachCategory,
-        mode: form.mode,
-        level: form.teachLevel,
-      })
-    );
+    setSubmitting(true);
+    try {
+      // Optimistic updates
+      dispatch(updateUser(updatedUser));
+      dispatch(addSkillListing(skillPayload));
 
-    dispatch(
-      addNotification({
-        type: "session",
-        title: "Skill listing published!",
-        text: `Your listing for ${form.teachSkill} ↔ ${form.wantSkill} is live and visible on Discover.`,
-      })
-    );
+      // Real MongoDB Atlas updates
+      await dispatch(updateUserAsync(updatedUser));
+      await dispatch(addSkillListingAsync(skillPayload));
 
-    navigate("/discover");
+      dispatch(
+        addNotification({
+          type: "session",
+          title: "Skill listing published!",
+          text: `Your listing for ${form.teachSkill} ↔ ${form.wantSkill} is live and visible on Discover.`,
+        })
+      );
+
+      navigate("/discover");
+    } catch {
+      setErrors({ general: "Failed to publish skill listing. Please check connection and try again." });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -245,8 +270,8 @@ export default function ShareSkill() {
         </div>
 
         <div style={{ display: "flex", gap: 12 }}>
-          <button type="submit" className="btn btn-dark">
-            <FiPlus /> Publish Skill Listing
+          <button type="submit" className="btn btn-dark" disabled={submitting}>
+            <FiPlus /> {submitting ? "Publishing..." : "Publish Skill Listing"}
           </button>
           <button type="button" className="btn btn-outline" onClick={() => navigate("/discover")}>
             Cancel

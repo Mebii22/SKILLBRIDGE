@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
@@ -6,10 +6,15 @@ import {
   FiVideo, FiCheck, FiExternalLink, FiClock, FiFileText, FiShield,
 } from "react-icons/fi";
 import SkillTag from "../../components/SkillTag";
+import ScheduleSessionModal from "../../components/ScheduleSessionModal";
 import {
   acceptRequest,
   completeExchangeSession,
   submitExchangeReview,
+  fetchExchangesAsync,
+  acceptExchangeAsync,
+  completeExchangeSessionAsync,
+  submitExchangeReviewAsync,
 } from "../../redux/slices/exchangeSlice";
 import { addReviewToUser } from "../../redux/slices/userSlice";
 import { addNotification } from "../../redux/slices/notificationSlice";
@@ -24,8 +29,12 @@ export default function ExchangeDetails() {
   const conversations = useSelector((s) => s.messages.conversations);
   const currentUser = useSelector((s) => s.user.currentUser);
 
-  const ex = exchanges.find((e) => String(e.id) === String(id));
-  const partner = ex ? (allUsers || []).find((u) => u.id === ex.partnerId || u.name === ex.partnerName) : null;
+  useEffect(() => {
+    dispatch(fetchExchangesAsync());
+  }, [dispatch]);
+
+  const ex = exchanges.find((e) => String(e.id || e._id) === String(id));
+  const partner = ex ? (allUsers || []).find((u) => String(u.id || u._id) === String(ex.partnerId) || u.name === ex.partnerName) : null;
   const partnerPhoto = partner?.photo || ex?.partnerPhoto;
   const partnerName = partner?.name || ex?.partnerName;
   const partnerId = partner?.id || ex?.partnerId;
@@ -36,6 +45,7 @@ export default function ExchangeDetails() {
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   if (!ex) {
     return (
@@ -73,7 +83,9 @@ export default function ExchangeDetails() {
   const sessions = ex.sessions || [];
 
   const handleAcceptAgreement = () => {
-    dispatch(acceptRequest(ex.id));
+    const exchangeId = ex._id || ex.id;
+    dispatch(acceptRequest(ex.id || ex._id));
+    dispatch(acceptExchangeAsync(exchangeId));
     dispatch(
       addNotification({
         type: "accepted",
@@ -84,7 +96,10 @@ export default function ExchangeDetails() {
   };
 
   const handleCompleteSession = (session) => {
-    dispatch(completeExchangeSession({ exchangeId: ex.id, sessionId: session.id }));
+    const exchangeId = ex._id || ex.id;
+    const sessionId = session._id || session.id;
+    dispatch(completeExchangeSession({ exchangeId: ex.id || ex._id, sessionId: session.id || session._id }));
+    dispatch(completeExchangeSessionAsync({ exchangeId, sessionId }));
     dispatch(
       addNotification({
         type: "session",
@@ -98,14 +113,16 @@ export default function ExchangeDetails() {
     e.preventDefault();
     if (!reviewText.trim()) return;
 
+    const exchangeId = ex._id || ex.id;
     const reviewObj = {
-      from: currentUser?.name || "Mebin J.",
+      from: currentUser?.name || currentUser?.fullName || "Peer Learner",
       rating,
       text: reviewText.trim(),
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     };
 
-    dispatch(submitExchangeReview({ exchangeId: ex.id, rating, review: reviewText.trim() }));
+    dispatch(submitExchangeReview({ exchangeId: ex.id || ex._id, rating, review: reviewText.trim() }));
+    dispatch(submitExchangeReviewAsync({ exchangeId, rating, review: reviewText.trim() }));
     if (partnerId) {
       dispatch(addReviewToUser({ userId: partnerId, partnerName, review: reviewObj }));
     }
@@ -312,13 +329,23 @@ export default function ExchangeDetails() {
 
       {/* Session Plan (1, 2, 3, 4...) */}
       <div className="dash-panel">
-        <div className="panel-title">
+        <div className="panel-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
             <h3>Exchange Sessions ({completedSessions}/{totalSessions} Completed)</h3>
             <p style={{ margin: 0, fontSize: 13.5, color: "var(--gray)" }}>
               Complete sessions and mark them off to build your mutual learning portfolio.
             </p>
           </div>
+          {isActive && (
+            <button
+              type="button"
+              className="btn btn-dark btn-xs"
+              onClick={() => setShowScheduleModal(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <FiCalendar /> Schedule a Session
+            </button>
+          )}
         </div>
 
         {sessions.length === 0 ? (
@@ -488,6 +515,19 @@ export default function ExchangeDetails() {
           <p style={{ color: "var(--gray)", fontSize: 14 }}>No messages yet — say hello to start coordinating!</p>
         )}
       </div>
+
+      <ScheduleSessionModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        partnerName={partnerName}
+        partnerId={partnerId}
+        partnerPhoto={partnerPhoto}
+        defaultSkill={ex.teach || ex.want}
+        exchangeId={ex.id || ex._id}
+        onSuccess={() => {
+          dispatch(fetchExchangesAsync());
+        }}
+      />
     </>
   );
 }

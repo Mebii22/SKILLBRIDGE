@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Provider } from "react-redux";
 import { store } from "./redux/store";
+import { fetchMeAsync } from "./redux/slices/userSlice";
 
 import Loader from "./components/Loader";
 import Navbar from "./components/Navbar";
@@ -33,6 +34,9 @@ import AdminLogin from "./pages/admin/AdminLogin";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/Users";
 import AdminSkillListings from "./pages/admin/SkillListings";
+import AdminExchanges from "./pages/admin/AdminExchanges";
+import AdminSessions from "./pages/admin/AdminSessions";
+import AdminActivity from "./pages/admin/AdminActivity";
 import AdminReports from "./pages/admin/Reports";
 
 /* Public pages share the navbar + footer */
@@ -52,7 +56,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1600);
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      store.dispatch(fetchMeAsync());
+    }
+    const timer = setTimeout(() => setLoading(false), 800);
     return () => clearTimeout(timer);
   }, []);
 
@@ -66,6 +74,8 @@ export default function App() {
           <Route element={<PublicLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/about" element={<About />} />
+            <Route path="/faq" element={<About />} />
+            <Route path="/contact" element={<About />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
           </Route>
@@ -93,6 +103,7 @@ export default function App() {
           </Route>
 
           {/* ---------- private admin routes (not linked anywhere public) ---------- */}
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route
             element={
@@ -104,6 +115,9 @@ export default function App() {
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/skills" element={<AdminSkillListings />} />
+            <Route path="/admin/exchanges" element={<AdminExchanges />} />
+            <Route path="/admin/sessions" element={<AdminSessions />} />
+            <Route path="/admin/activity" element={<AdminActivity />} />
             <Route path="/admin/reports" element={<AdminReports />} />
           </Route>
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { FiMapPin, FiBookmark, FiArrowRight, FiArrowUpRight, FiArrowDownLeft, FiSend } from "react-icons/fi";
-import { toggleSaved } from "../redux/slices/savedSlice";
+import { toggleSaved, toggleSavedAsync } from "../redux/slices/savedSlice";
 import SkillTag from "./SkillTag";
 import ExchangeRequestModal from "./ExchangeRequestModal";
 import { calculateMatchScore } from "../utils/matching";
@@ -11,7 +11,8 @@ export default function ProfileCard({ user }) {
   const dispatch = useDispatch();
   const savedIds = useSelector((s) => s.saved.savedIds);
   const currentUser = useSelector((s) => s.user.currentUser);
-  const saved = savedIds.includes(user.id);
+  const targetId = user.id || user._id;
+  const saved = savedIds.map(String).includes(String(targetId));
 
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [toast, setToast] = useState(false);
@@ -27,6 +28,11 @@ export default function ProfileCard({ user }) {
   const handleSwapSuccess = () => {
     setToast(true);
     setTimeout(() => setToast(false), 2600);
+  };
+
+  const handleToggleSaved = () => {
+    dispatch(toggleSaved(targetId));
+    dispatch(toggleSavedAsync(targetId));
   };
 
   return (
@@ -58,7 +64,7 @@ export default function ProfileCard({ user }) {
           <button
             className={`icon-btn ${saved ? "saved" : ""}`}
             style={{ marginLeft: "auto" }}
-            onClick={() => dispatch(toggleSaved(user.id))}
+            onClick={handleToggleSaved}
             title="Save profile"
           >
             <FiBookmark fill={saved ? "#111" : "none"} />
@@ -75,6 +81,27 @@ export default function ProfileCard({ user }) {
             <SkillTag>{wants}</SkillTag>
           </div>
         </div>
+
+        {matchData.explanation && (
+          <div
+            style={{
+              padding: "6px 10px",
+              margin: "6px 0 10px",
+              borderRadius: "8px",
+              background: matchData.tier === "excellent" ? "rgba(46, 125, 50, 0.08)" : "var(--cream)",
+              border: `1px solid ${matchData.tier === "excellent" ? "rgba(46, 125, 50, 0.2)" : "var(--border)"}`,
+              fontSize: "11.5px",
+              color: matchData.tier === "excellent" ? "#1b5e20" : "var(--ink)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "6px",
+              lineHeight: 1.35,
+            }}
+          >
+            <span style={{ fontSize: "12px", flexShrink: 0 }}>💡</span>
+            <span style={{ flex: 1 }}>{matchData.explanation}</span>
+          </div>
+        )}
 
         <div className="pc-foot" style={{ gap: 8, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
           <span
@@ -128,7 +155,7 @@ export default function ProfileCard({ user }) {
               </button>
             )}
             <Link
-              to={`/profile/${user.id}`}
+              to={`/profile/${user.id || user._id}`}
               className="btn btn-outline btn-xs"
               style={{
                 padding: "6px 11px",

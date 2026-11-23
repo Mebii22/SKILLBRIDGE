@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FiCheck } from "react-icons/fi";
-import { deleteUser } from "../../redux/slices/userSlice";
+import { deleteUser, deleteUserAsync } from "../../redux/slices/userSlice";
+import API from "../../api/client";
 
 export default function Settings() {
   const user = useSelector((s) => s.user.currentUser);
@@ -40,7 +41,7 @@ export default function Settings() {
     }
   };
 
-  const changePassword = (e) => {
+  const changePassword = async (e) => {
     e.preventDefault();
     if (pw.next.length < 6) {
       setIsError(true);
@@ -54,42 +55,28 @@ export default function Settings() {
     }
 
     try {
-      const accounts = JSON.parse(localStorage.getItem("skillbridge_registered_accounts") || "[]");
-      const userEmail = (user?.email || "").toLowerCase();
-      const accountIndex = accounts.findIndex((a) => a.email.toLowerCase() === userEmail);
-
-      if (accountIndex !== -1) {
-        if (pw.current && accounts[accountIndex].password && accounts[accountIndex].password !== pw.current) {
-          setIsError(true);
-          setMsg("Current password is incorrect.");
-          return;
-        }
-        accounts[accountIndex].password = pw.next;
-        localStorage.setItem("skillbridge_registered_accounts", JSON.stringify(accounts));
-      } else {
-        // Create an entry if it was a demo user without a record yet
-        accounts.push({
-          email: userEmail,
-          password: pw.next,
-          user,
-        });
-        localStorage.setItem("skillbridge_registered_accounts", JSON.stringify(accounts));
-      }
+      // Direct API update to MongoDB Atlas
+      await API.put("/users/change-password", {
+        currentPassword: pw.current,
+        newPassword: pw.next,
+      });
 
       setIsError(false);
       setMsg("Password updated successfully!");
       setPw({ current: "", next: "", confirm: "" });
       setTimeout(() => setMsg(""), 3500);
-    } catch (err) {
+    } catch (apiErr) {
       setIsError(true);
-      setMsg("Could not update password. Please try again.");
+      setMsg(apiErr.response?.data?.message || "Could not update password. Please check your current password.");
     }
   };
 
   const handleDelete = () => {
     if (window.confirm("Are you sure you want to delete your account? This will remove your profile and log you out.")) {
-      if (user?.id) {
-        dispatch(deleteUser(user.id));
+      const uid = user?._id || user?.id;
+      if (uid) {
+        dispatch(deleteUser(user.id || user._id));
+        dispatch(deleteUserAsync(uid));
       }
       navigate("/");
     }

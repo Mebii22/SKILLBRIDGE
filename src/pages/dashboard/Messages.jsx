@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { FiSend, FiArrowLeft } from "react-icons/fi";
-import { sendMessage, startConversation } from "../../redux/slices/messageSlice";
+import {
+  sendMessage,
+  startConversation,
+  fetchConversationsAsync,
+  startConversationAsync,
+  sendMessageAsync,
+  markConversationReadAsync,
+} from "../../redux/slices/messageSlice";
 import { addNotification } from "../../redux/slices/notificationSlice";
 import EmptyState from "../../components/EmptyState";
 
@@ -12,17 +19,26 @@ export default function Messages() {
   const dispatch = useDispatch();
   const convos = useSelector((s) => s.messages.conversations);
 
-  const [activeId, setActiveId] = useState(convos[0]?.id || 1);
+  const [activeId, setActiveId] = useState(convos[0]?._id || convos[0]?.id || 1);
   const [text, setText] = useState("");
   const [mobileShowChat, setMobileShowChat] = useState(Boolean(location.state?.partnerName));
+
+  useEffect(() => {
+    dispatch(fetchConversationsAsync());
+    const pollTimer = setInterval(() => {
+      dispatch(fetchConversationsAsync());
+    }, 6000);
+    return () => clearInterval(pollTimer);
+  }, [dispatch]);
 
   // Handle incoming partner from other pages
   useEffect(() => {
     if (location.state && location.state.partnerName) {
       const { partnerId, partnerName, partnerPhoto } = location.state;
-      let existing = convos.find((c) => c.userId === partnerId || c.name === partnerName);
+      let existing = convos.find((c) => String(c.userId) === String(partnerId) || c.name === partnerName);
       if (!existing) {
         dispatch(startConversation({ partnerId, partnerName, partnerPhoto }));
+        if (partnerId) dispatch(startConversationAsync({ partnerId }));
       }
       setMobileShowChat(true);
     }
@@ -30,33 +46,29 @@ export default function Messages() {
 
   useEffect(() => {
     if (location.state && location.state.partnerName) {
-      const match = convos.find((c) => c.userId === location.state.partnerId || c.name === location.state.partnerName);
+      const match = convos.find((c) => String(c.userId) === String(location.state.partnerId) || c.name === location.state.partnerName);
       if (match) {
-        setActiveId(match.id);
+        setActiveId(match._id || match.id);
         setMobileShowChat(true);
       }
     }
   }, [convos, location.state]);
 
-  const active = convos.find((c) => c.id === activeId) || convos[0];
+  const active = convos.find((c) => String(c._id || c.id) === String(activeId)) || convos[0];
 
   const send = () => {
     if (!text.trim() || !active) return;
     const msgText = text.trim();
-    dispatch(sendMessage({ conversationId: active.id, text: msgText, from: "me" }));
-    setText("");
-
-    // Simulate interactive auto-reply
-    const currentActiveId = active.id;
+    const currentActiveId = active._id || active.id;
     const partnerName = active.name;
-    setTimeout(() => {
-      dispatch(sendMessage({ conversationId: currentActiveId, text: "Sounds good! Talk soon.", from: "them" }));
-      dispatch(addNotification({
-        type: "message",
-        title: "New message",
-        text: `${partnerName} replied to your message.`,
-      }));
-    }, 1200);
+
+    dispatch(sendMessage({ conversationId: currentActiveId, text: msgText, from: "me" }));
+    dispatch(sendMessageAsync({
+      conversationId: currentActiveId,
+      recipientId: active.userId,
+      text: msgText,
+    }));
+    setText("");
   };
 
   if (!convos || convos.length === 0) {
@@ -89,10 +101,12 @@ export default function Messages() {
         <div className="conv-list">
           {convos.map((c) => (
             <button
-              key={c.id}
-              className={`conv ${c.id === (active?.id) ? "active" : ""}`}
+              key={c._id || c.id}
+              className={`conv ${String(c._id || c.id) === String(active?._id || active?.id) ? "active" : ""}`}
               onClick={() => {
-                setActiveId(c.id);
+                const idVal = c._id || c.id;
+                setActiveId(idVal);
+                dispatch(markConversationReadAsync(idVal));
                 setMobileShowChat(true);
               }}
             >

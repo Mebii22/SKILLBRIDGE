@@ -9,11 +9,10 @@ import {
   FiVideo,
   FiShield,
   FiAlertCircle,
-  FiCheck,
   FiInfo,
 } from "react-icons/fi";
-import { SKILLS, currentUser as defaultMebin } from "../data/dummyData";
-import { sendRequest } from "../redux/slices/exchangeSlice";
+import { SKILLS } from "../data/dummyData";
+import { sendRequest, createExchangeAsync } from "../redux/slices/exchangeSlice";
 import { addNotification } from "../redux/slices/notificationSlice";
 import { calculateMatchScore } from "../utils/matching";
 
@@ -21,9 +20,10 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
   const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.user.currentUser);
 
-  // Fallback to defaultMebin if browsing as guest
-  const effectiveUser = currentUser || defaultMebin;
-  const isSelf = currentUser && targetUser && String(currentUser.id) === String(targetUser.id);
+  const effectiveUser = currentUser;
+  const currentUserId = currentUser?._id || currentUser?.id;
+  const targetUserId = targetUser?._id || targetUser?.id;
+  const isSelf = currentUserId && targetUserId && String(currentUserId) === String(targetUserId);
 
   const matchData = calculateMatchScore(currentUser, targetUser);
 
@@ -151,12 +151,14 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
       acceptedAt: null,
     };
 
+    const targetPartnerId = targetUser.id || targetUser._id;
+
     dispatch(
       sendRequest({
-        partnerId: targetUser.id,
+        partnerId: targetPartnerId,
         partnerName: targetUser.name,
         partnerPhoto: targetUser.photo,
-        requesterId: effectiveUser?.id,
+        requesterId: effectiveUser?.id || effectiveUser?._id,
         requesterName: effectiveUser?.name || "SkillBridge Learner",
         requesterPhoto: effectiveUser?.photo,
         teach: form.teach,
@@ -170,6 +172,23 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
         meetingLocation: form.mode === "Offline" ? location : "",
         message: form.message.trim(),
         agreement,
+      })
+    );
+
+    // Dispatch real backend persistence
+    dispatch(
+      createExchangeAsync({
+        partnerId: targetPartnerId,
+        teach: form.teach,
+        want: form.want,
+        mode: form.mode,
+        totalSessions: Number(form.totalSessions),
+        duration: form.duration,
+        preferredDate: form.date,
+        preferredTime: form.time,
+        meetingLink: form.mode === "Online" ? meetingLink : "",
+        meetingLocation: form.mode === "Offline" ? location : "",
+        message: form.message.trim(),
       })
     );
 

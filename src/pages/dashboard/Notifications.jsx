@@ -1,6 +1,13 @@
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { FiRepeat, FiCheckCircle, FiMessageCircle, FiCalendar, FiAward } from "react-icons/fi";
-import { markAllRead, markRead } from "../../redux/slices/notificationSlice";
+import {
+  markAllRead,
+  markRead,
+  fetchNotificationsAsync,
+  markNotificationReadAsync,
+  markAllNotificationsReadAsync,
+} from "../../redux/slices/notificationSlice";
 
 const ICONS = {
   request: FiRepeat,
@@ -8,12 +15,27 @@ const ICONS = {
   message: FiMessageCircle,
   session: FiCalendar,
   completed: FiAward,
+  profile_updated: FiCheckCircle,
 };
 
 export default function Notifications() {
   const items = useSelector((s) => s.notifications.items);
   const dispatch = useDispatch();
   const unread = items.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    dispatch(fetchNotificationsAsync());
+  }, [dispatch]);
+
+  const handleMarkAll = () => {
+    dispatch(markAllRead());
+    dispatch(markAllNotificationsReadAsync());
+  };
+
+  const handleMarkOne = (n) => {
+    dispatch(markRead(n.id));
+    dispatch(markNotificationReadAsync(n._id || n.id));
+  };
 
   return (
     <>
@@ -23,7 +45,7 @@ export default function Notifications() {
           <p>{unread > 0 ? `${unread} unread notification${unread > 1 ? "s" : ""}.` : "You're all caught up!"}</p>
         </div>
         {unread > 0 && (
-          <button className="btn btn-outline btn-sm" onClick={() => dispatch(markAllRead())}>Mark all as read</button>
+          <button className="btn btn-outline btn-sm" onClick={handleMarkAll}>Mark all as read</button>
         )}
       </div>
 
@@ -32,9 +54,9 @@ export default function Notifications() {
           const Icon = ICONS[n.type] || FiCalendar;
           return (
             <div
-              key={n.id}
+              key={n._id || n.id}
               className={`notif ${n.read ? "" : "unread"}`}
-              onClick={() => dispatch(markRead(n.id))}
+              onClick={() => handleMarkOne(n)}
               style={{ cursor: "pointer" }}
             >
               <span className="notif-icon"><Icon /></span>

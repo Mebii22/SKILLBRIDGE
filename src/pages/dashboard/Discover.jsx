@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { useSelector } from "react-redux";
-import { FiSearch, FiPlus, FiGlobe, FiMapPin } from "react-icons/fi";
+import { useSelector, useDispatch } from "react-redux";
+import { FiSearch, FiPlus } from "react-icons/fi";
 import ProfileCard from "../../components/ProfileCard";
 import Reveal from "../../components/Reveal";
 import { CATEGORIES, LOCATIONS } from "../../data/dummyData";
 import { calculateMatchScore } from "../../utils/matching";
+import { fetchUsersAsync } from "../../redux/slices/userSlice";
 
 const MODES = [
   { key: "All", label: "All Modes" },
@@ -18,6 +19,7 @@ export default function Discover() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
+  const [recommendationFilter, setRecommendationFilter] = useState("all");
   const [category, setCategory] = useState("All");
   const [location, setLocation] = useState("All Locations");
   const [modeFilter, setModeFilter] = useState("All");
@@ -25,11 +27,24 @@ export default function Discover() {
 
   const allUsers = useSelector((s) => s.user.users);
   const currentUser = useSelector((s) => s.user.currentUser);
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(fetchUsersAsync());
+  }, [dispatch]);
+
+  // Keep query in sync if searchParams change (e.g., browser back/forward or navigation)
+  useEffect(() => {
+    const q = searchParams.get("q") || "";
+    if (q !== query) {
+      setQuery(q);
+    }
+  }, [searchParams]);
 
   const filtered = (allUsers || [])
     .filter((u) => {
       // Don't show current logged-in user or disabled accounts in discover
-      if (currentUser && String(u.id) === String(currentUser.id)) return false;
+      if (currentUser && String(u.id || u._id) === String(currentUser.id || currentUser._id)) return false;
       if (u.status === "Disabled") return false;
 
       const q = query.trim().toLowerCase();
@@ -39,6 +54,7 @@ export default function Discover() {
       const matchesQuery =
         !q ||
         (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.fullName && u.fullName.toLowerCase().includes(q)) ||
         (u.city && u.city.toLowerCase().includes(q)) ||
         (u.location && u.location.toLowerCase().includes(q)) ||
         teaches.some((t) => t.toLowerCase().includes(q)) ||
@@ -52,7 +68,20 @@ export default function Discover() {
         u.mode === "Both" ||
         (modeFilter === "Both" && (u.mode === "Online" || u.mode === "Offline" || u.mode === "Both"));
 
-      return matchesQuery && matchesCat && matchesLoc && matchesMode;
+      // Match recommendation category filter
+      let matchesRec = true;
+      if (recommendationFilter !== "all" && currentUser) {
+        const matchData = calculateMatchScore(currentUser, u);
+        if (recommendationFilter === "mutual") {
+          matchesRec = matchData.recommendationType === "mutual";
+        } else if (recommendationFilter === "can_teach_you") {
+          matchesRec = (matchData.theyTeachYouWant || []).length > 0;
+        } else if (recommendationFilter === "you_can_teach") {
+          matchesRec = (matchData.youTeachTheyWant || []).length > 0;
+        }
+      }
+
+      return matchesQuery && matchesCat && matchesLoc && matchesMode && matchesRec;
     })
     .sort((a, b) => {
       if (sort === "match") {
@@ -86,13 +115,40 @@ export default function Discover() {
       </div>
 
       <div className="controls">
-        <div className="search-bar">
-          <FiSearch />
+        <div className="search-bar" style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <FiSearch style={{ flexShrink: 0 }} />
           <input
             placeholder="Search skills, people or city… (e.g. photography, react, kochi)"
             value={query}
             onChange={handleQueryChange}
+            style={{ flex: 1, paddingRight: query ? 28 : undefined }}
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setSearchParams({});
+              }}
+              style={{
+                position: "absolute",
+                right: 12,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--gray)",
+                fontSize: 14,
+                padding: 4,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
         </div>
         <select className="select" value={location} onChange={(e) => setLocation(e.target.value)}>
           {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
@@ -108,7 +164,37 @@ export default function Discover() {
         </select>
       </div>
 
-      <div className="controls" style={{ marginTop: 12 }}>
+      <div className="controls" style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          className={`chip ${recommendationFilter === "all" ? "active" : ""}`}
+          onClick={() => setRecommendationFilter("all")}
+        >
+          ✨ All Matches
+        </button>
+        <button
+          className={`chip ${recommendationFilter === "mutual" ? "active" : ""}`}
+          onClick={() => setRecommendationFilter("mutual")}
+          title="Users where both of you can teach what the other wants"
+        >
+          ⚡ Mutual Matches
+        </button>
+        <button
+          className={`chip ${recommendationFilter === "can_teach_you" ? "active" : ""}`}
+          onClick={() => setRecommendationFilter("can_teach_you")}
+          title="Users who can teach skills you want to learn"
+        >
+          🎓 Can Teach You
+        </button>
+        <button
+          className={`chip ${recommendationFilter === "you_can_teach" ? "active" : ""}`}
+          onClick={() => setRecommendationFilter("you_can_teach")}
+          title="Users who want to learn skills you can teach"
+        >
+          🤝 You Can Teach
+        </button>
+      </div>
+
+      <div className="controls" style={{ marginTop: 8 }}>
         <button className={`chip ${category === "All" ? "active" : ""}`} onClick={() => setCategory("All")}>All</button>
         {CATEGORIES.filter((c) => c !== "All Skills").map((c) => (
           <button key={c} className={`chip ${category === c ? "active" : ""}`} onClick={() => setCategory(c)}>{c}</button>
@@ -126,7 +212,7 @@ export default function Discover() {
       ) : (
         <div className="card-grid">
           {filtered.map((u, i) => (
-            <Reveal key={u.id} delay={(i % 3) * 110}>
+            <Reveal key={u.id || u._id || i} delay={(i % 3) * 110}>
               <ProfileCard user={u} />
             </Reveal>
           ))}

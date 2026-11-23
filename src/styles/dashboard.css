@@ -76,7 +76,7 @@
 .st-pending { background: rgba(247, 200, 67, 0.3); color: #7A5C00; }
 .st-active { background: rgba(17, 17, 17, 0.09); color: var(--ink); }
 .st-completed { background: rgba(46, 125, 50, 0.14); color: #2E7D32; }
-.st-cancelled { background: rgba(179, 38, 30, 0.12); color: #B3261E; }
+.st-cancelled, .st-rejected { background: rgba(179, 38, 30, 0.12); color: #B3261E; }
 
 /* tabs + filters */
 .tabs { display: flex; gap: 9px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -156,8 +156,249 @@ tbody tr:hover { background: var(--cream); }
 .t-user { display: flex; align-items: center; gap: 11px; font-weight: 700; }
 .t-user img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
 .t-mail { color: var(--gray); font-size: 12.5px; font-weight: 500; }
-.mini-tags { display: flex; gap: 6px; flex-wrap: wrap; }
-.mini-tags .tag { font-size: 11.5px; padding: 4px 10px; }
+.mini-tags { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.mini-tags .tag {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  max-width: 125px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Skill More Badge (+N) */
+.skill-more-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.skill-more-badge:hover,
+.skill-more-badge:focus-visible {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+  outline: none;
+}
+
+/* Exchange Management Responsive Table & Cards (No horizontal scroll) */
+.exchanges-desktop-view {
+  width: 100%;
+  display: block;
+}
+.exchanges-table-wrap {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.exchanges-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.exchanges-table th {
+  padding: 11px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+  border-bottom: 1.5px solid var(--border);
+  background: var(--cream);
+  vertical-align: middle;
+}
+.exchanges-table td {
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-size: 12.5px;
+}
+.exchanges-table tr:last-child td {
+  border-bottom: none;
+}
+.exchanges-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+.exchanges-table tbody tr:hover {
+  background: var(--cream);
+}
+.exchanges-table .exchange-inspect-btn:hover {
+  background: var(--cream) !important;
+  border-color: var(--ink) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.exchange-filter-btn {
+  transition: all 0.15s ease;
+}
+.exchange-filter-btn:hover:not(.active) {
+  background: var(--cream) !important;
+  border-color: var(--gray) !important;
+}
+.exchanges-mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Session Monitoring Responsive Table & Cards (No horizontal scroll) */
+.sessions-desktop-view {
+  width: 100%;
+  display: block;
+}
+.sessions-table-wrap {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.sessions-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.sessions-table th {
+  padding: 11px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+  border-bottom: 1.5px solid var(--border);
+  background: var(--cream);
+  vertical-align: middle;
+}
+.sessions-table td {
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-size: 12.5px;
+}
+.sessions-table tr:last-child td {
+  border-bottom: none;
+}
+.sessions-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+.sessions-table tbody tr:hover {
+  background: var(--cream);
+}
+.sessions-table .session-inspect-btn:hover {
+  background: var(--cream) !important;
+  border-color: var(--ink) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.sessions-mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Activity Log Responsive Table & Cards (No horizontal scroll on desktop) */
+.activity-desktop-view {
+  width: 100%;
+  display: block;
+}
+.activity-table-wrap {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.activity-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.activity-table th {
+  padding: 12px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray);
+  border-bottom: 1.5px solid var(--border);
+  background: var(--cream);
+  vertical-align: middle;
+}
+.activity-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-size: 13px;
+}
+.activity-table tr:last-child td {
+  border-bottom: none;
+}
+.activity-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+.activity-table tbody tr:hover {
+  background: var(--cream);
+}
+.activity-table .activity-inspect-btn:hover {
+  background: var(--cream) !important;
+  border-color: var(--ink) !important;
+  color: var(--ink) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.activity-filter-btn {
+  transition: all 0.15s ease;
+}
+.activity-filter-btn:hover:not(.active) {
+  background: var(--cream) !important;
+  border-color: var(--gray) !important;
+}
+.activity-mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .exchanges-desktop-view {
+    display: none !important;
+  }
+  .exchanges-mobile-cards {
+    display: flex !important;
+  }
+  .sessions-desktop-view {
+    display: none !important;
+  }
+  .sessions-mobile-cards {
+    display: flex !important;
+  }
+  .activity-desktop-view {
+    display: none !important;
+  }
+  .activity-mobile-cards {
+    display: flex !important;
+  }
+}
 
 /* forms */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -334,4 +575,34 @@ tbody tr:hover { background: var(--cream); }
   .menu-btn, .top-icon, .avatar-btn { width: 38px; height: 38px; }
   .panel-title { flex-direction: column; align-items: flex-start; gap: 6px; }
   .page-head h1 { font-size: 24px; }
+}
+
+/* ============ MODAL BACKDROP & BOX HELPERS ============ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(17, 17, 17, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.2s ease;
+  box-sizing: border-box;
+}
+
+.modal-box {
+  background: var(--surface);
+  border-radius: 22px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  border: 1px solid var(--border);
 }

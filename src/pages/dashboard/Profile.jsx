@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -7,23 +7,29 @@ import {
 } from "react-icons/fi";
 import SkillTag from "../../components/SkillTag";
 import ExchangeRequestModal from "../../components/ExchangeRequestModal";
-import { toggleSaved } from "../../redux/slices/savedSlice";
+import { toggleSaved, toggleSavedAsync } from "../../redux/slices/savedSlice";
+import { fetchUsersAsync } from "../../redux/slices/userSlice";
 import { getSocialUrl } from "../../utils/socials";
 import { calculateMatchScore } from "../../utils/matching";
 
 export default function Profile() {
   const { id } = useParams();
+  const dispatch = useDispatch();
   const allUsers = useSelector((s) => s.user.users);
   const currentUser = useSelector((s) => s.user.currentUser);
-  const user = (allUsers || []).find((u) => String(u.id) === String(id)) || allUsers[0];
-  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(fetchUsersAsync());
+  }, [dispatch]);
+
+  const user = (allUsers || []).find((u) => String(u.id || u._id) === String(id));
   const savedIds = useSelector((s) => s.saved.savedIds);
-  const saved = user ? savedIds.includes(user.id) : false;
+  const saved = user ? savedIds.some((sid) => String(sid) === String(user.id || user._id)) : false;
 
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast] = useState(false);
 
-  const isSelf = currentUser && user && String(currentUser.id) === String(user.id);
+  const isSelf = currentUser && user && String(currentUser.id || currentUser._id) === String(user.id || user._id);
   const matchData = calculateMatchScore(currentUser, user);
 
   if (!user) {
@@ -129,7 +135,11 @@ export default function Profile() {
                 </button>
                 <button
                   className={`btn btn-sm ${saved ? "btn-yellow" : "btn-outline"}`}
-                  onClick={() => dispatch(toggleSaved(user.id))}
+                  onClick={() => {
+                    const uid = user.id || user._id;
+                    dispatch(toggleSaved(uid));
+                    dispatch(toggleSavedAsync(user._id || user.id));
+                  }}
                 >
                   {saved ? <><FiCheck /> Saved</> : <><FiBookmark /> Save Profile</>}
                 </button>

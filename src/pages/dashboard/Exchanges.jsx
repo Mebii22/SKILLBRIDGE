@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { useSelector } from "react-redux";
+import { useState, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { FiRepeat, FiCalendar, FiCheckCircle, FiStar, FiAward, FiArrowRight } from "react-icons/fi";
 import ExchangeCard from "../../components/ExchangeCard";
 import EmptyState from "../../components/EmptyState";
 import SkillTag from "../../components/SkillTag";
+import { fetchExchangesAsync } from "../../redux/slices/exchangeSlice";
+import { fetchSessionsAsync } from "../../redux/slices/sessionSlice";
 
 const TABS = [
   { key: "pending", label: "Requests" },
@@ -14,10 +16,16 @@ const TABS = [
 
 export default function Exchanges() {
   const [tab, setTab] = useState("active");
+  const dispatch = useDispatch();
   const exchanges = useSelector((s) => s.exchanges.exchanges);
   const sessions = useSelector((s) => s.sessions.sessions);
   const currentUser = useSelector((s) => s.user.currentUser);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    dispatch(fetchExchangesAsync());
+    dispatch(fetchSessionsAsync());
+  }, [dispatch]);
 
   const activeCount = exchanges.filter((e) => e.status === "active").length;
   const completedCount = exchanges.filter((e) => e.status === "completed").length;
@@ -95,7 +103,7 @@ export default function Exchanges() {
           <div className="journey-grid">
             {list.map((ex) => (
               <div
-                key={ex.id}
+                key={ex._id || ex.id}
                 style={{
                   background: "var(--surface)",
                   borderRadius: 16,
@@ -145,7 +153,7 @@ export default function Exchanges() {
                       <FiStar key={i} fill="#F7C843" stroke="#111" />
                     ))}
                   </span>
-                  <Link to={`/exchanges/${ex.id}`} className="link" style={{ fontSize: 13, fontWeight: 600 }}>
+                  <Link to={`/exchanges/${ex._id || ex.id}`} className="link" style={{ fontSize: 13, fontWeight: 600 }}>
                     View Agreement <FiArrowRight />
                   </Link>
                 </div>
@@ -166,7 +174,7 @@ export default function Exchanges() {
             onAction={() => navigate("/discover")}
           />
         ) : (
-          list.map((ex) => <ExchangeCard key={ex.id} ex={ex} />)
+          list.map((ex) => <ExchangeCard key={ex._id || ex.id} ex={ex} />)
         )}
       </div>
     </>

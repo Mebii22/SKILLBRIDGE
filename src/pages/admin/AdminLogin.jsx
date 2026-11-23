@@ -1,25 +1,51 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { FiEye, FiEyeOff, FiShield } from "react-icons/fi";
 import { LogoMark } from "../../components/Navbar";
+import API from "../../api/client";
+import { loginUser } from "../../redux/slices/userSlice";
 
-/* Private admin login — reachable ONLY via the direct route /admin/login.
-   Demo credentials: admin@skillbridge.com / admin123
-   (never shown anywhere in the public UI) */
+/* Private admin access portal — reachable ONLY via the direct route /admin/login.
+   Restricted to authorized SkillBridge platform administrators. */
 export default function AdminLogin() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (form.email === "admin@skillbridge.com" && form.password === "admin123") {
-      localStorage.setItem("adminLoggedIn", "true");
-      navigate("/admin/dashboard");
-    } else {
-      setError("Invalid admin credentials.");
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await API.post("/auth/admin/login", {
+        email: form.email.trim(),
+        password: form.password,
+      });
+
+      if (res.data.token) {
+        localStorage.setItem("token", res.data.token);
+        localStorage.setItem("adminLoggedIn", "true");
+        if (res.data.admin) {
+          localStorage.setItem("currentUser", JSON.stringify(res.data.admin));
+          dispatch(loginUser(res.data.admin));
+        }
+        setLoading(false);
+        navigate("/admin/dashboard");
+        return;
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(err.response?.data?.message || "Invalid administrator credentials.");
+      return;
     }
+
+    setLoading(false);
+    setError("Invalid administrator credentials.");
   };
 
   return (
