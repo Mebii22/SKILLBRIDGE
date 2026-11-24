@@ -22,10 +22,11 @@ import {
   FiStar,
   FiLayers,
   FiCheck,
-  FiRefreshCw
+  FiRefreshCw,
+  FiTrash2
 } from "react-icons/fi";
 import SkillTag from "../../components/SkillTag";
-import { fetchAdminExchangesAsync } from "../../redux/slices/adminSlice";
+import { fetchAdminExchangesAsync, deleteAdminExchangeAsync } from "../../redux/slices/adminSlice";
 
 // Safe date formatters
 const formatDate = (dateStr) => {
@@ -123,20 +124,29 @@ export default function AdminExchanges() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [viewingExchange, setViewingExchange] = useState(null);
+  const [deletingExchange, setDeletingExchange] = useState(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
 
   useEffect(() => {
     dispatch(fetchAdminExchangesAsync());
   }, [dispatch]);
 
-  // Lock background scroll and support Escape key when the Inspect modal is open
+  // Lock background scroll and support Escape key when Inspect or Delete modal is open
   useEffect(() => {
-    if (viewingExchange) {
+    if (viewingExchange || deletingExchange) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
 
       const handleKeyDown = (e) => {
         if (e.key === "Escape") {
-          setViewingExchange(null);
+          if (!isDeleting) {
+            setViewingExchange(null);
+            setDeletingExchange(null);
+            setDeleteReason("");
+          }
         }
       };
 
@@ -146,7 +156,37 @@ export default function AdminExchanges() {
         window.removeEventListener("keydown", handleKeyDown);
       };
     }
-  }, [viewingExchange]);
+  }, [viewingExchange, deletingExchange, isDeleting]);
+
+  // Handler for confirmed permanent deletion
+  const handleConfirmDelete = async () => {
+    if (!deletingExchange) return;
+    if (!deleteReason || !deleteReason.trim()) {
+      setDeleteError("Please provide a deletion reason before confirming.");
+      return;
+    }
+    const exId = deletingExchange._id || deletingExchange.id;
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      const resultAction = await dispatch(
+        deleteAdminExchangeAsync({ id: exId, reason: deleteReason.trim() })
+      );
+      if (deleteAdminExchangeAsync.fulfilled.match(resultAction)) {
+        setIsDeleting(false);
+        setDeletingExchange(null);
+        setDeleteReason("");
+        setToastMsg(resultAction.payload?.message || "Exchange record permanently deleted.");
+        setTimeout(() => setToastMsg(""), 4000);
+      } else {
+        setIsDeleting(false);
+        setDeleteError(resultAction.payload || "Failed to delete exchange record.");
+      }
+    } catch {
+      setIsDeleting(false);
+      setDeleteError("An unexpected error occurred while deleting the exchange.");
+    }
+  };
 
   // Dynamic summary statistics calculated from database records
   const totalCount = exchanges.length;
@@ -641,9 +681,9 @@ export default function AdminExchanges() {
                         </div>
                       </td>
 
-                      {/* 8. Actions (Inspect) - Fully visible, centered, non-sticky */}
+                      {/* 8. Actions (Inspect & Delete) - Fully visible, centered, non-sticky */}
                       <td style={{ textAlign: "center", whiteSpace: "nowrap", padding: "11px 6px" }}>
-                        <div style={{ display: "flex", justifyContent: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
                           <button
                             type="button"
                             className="btn-xs exchange-inspect-btn"
@@ -651,7 +691,7 @@ export default function AdminExchanges() {
                               background: "var(--surface)",
                               border: "1px solid var(--border)",
                               color: "var(--text)",
-                              padding: "5px 11px",
+                              padding: "5px 10px",
                               borderRadius: 7,
                               fontSize: 12,
                               fontWeight: 600,
@@ -666,6 +706,33 @@ export default function AdminExchanges() {
                             title="Inspect exchange agreement details"
                           >
                             <FiEye style={{ fontSize: 12 }} /> Inspect
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-xs exchange-delete-btn"
+                            style={{
+                              background: "var(--surface)",
+                              border: "1px solid #fecaca",
+                              color: "#b91c1c",
+                              padding: "5px 10px",
+                              borderRadius: 7,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
+                            }}
+                            onClick={() => {
+                              setDeleteError("");
+                              setDeleteReason("");
+                              setDeletingExchange(ex);
+                            }}
+                            title="Delete this exchange record"
+                          >
+                            <FiTrash2 style={{ fontSize: 12 }} /> Delete
                           </button>
                         </div>
                       </td>
@@ -848,15 +915,39 @@ export default function AdminExchanges() {
                   </span>
                 </div>
 
-                {/* Inspect Action */}
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={() => setViewingExchange(ex)}
-                  style={{ width: "100%", justifyContent: "center", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, marginTop: 2 }}
-                >
-                  <FiEye /> Inspect Agreement Details
-                </button>
+                {/* Actions: Inspect & Delete */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 2 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setViewingExchange(ex)}
+                    style={{ width: "100%", justifyContent: "center", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                  >
+                    <FiEye /> Inspect
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setDeleteError("");
+                      setDeleteReason("");
+                      setDeletingExchange(ex);
+                    }}
+                    style={{
+                      width: "100%",
+                      justifyContent: "center",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontWeight: 600,
+                      background: "#fee2e2",
+                      color: "#b91c1c",
+                      border: "1px solid #fecaca"
+                    }}
+                  >
+                    <FiTrash2 /> Delete
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -1683,6 +1774,360 @@ export default function AdminExchanges() {
           </div>
         );
       })()}
+
+      {/* 7. Permanent Delete Confirmation Modal */}
+      {deletingExchange && (() => {
+        const ex = deletingExchange;
+        const eid = String(ex._id || ex.id || "N/A");
+        const statusMeta = getStatusMeta(ex.status);
+        const reqName = ex.requesterName || (ex.requester && (ex.requester.fullName || ex.requester.name)) || "Member";
+        const reqEmail = ex.requesterEmail || (ex.requester && ex.requester.email) || "";
+        const partName = ex.partnerName || (ex.partner && (ex.partner.fullName || ex.partner.name)) || "Partner";
+        const partEmail = ex.partnerEmail || (ex.partner && ex.partner.email) || "";
+        const teachSkill = ex.teach || "Skill";
+        const wantSkill = ex.want || "Skill";
+
+        return (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(17, 17, 17, 0.65)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 16
+            }}
+            onClick={() => !isDeleting && setDeletingExchange(null)}
+          >
+            <div
+              style={{
+                background: "var(--surface)",
+                borderRadius: 20,
+                width: "100%",
+                maxWidth: 520,
+                overflow: "hidden",
+                border: "1px solid var(--border)",
+                boxShadow: "0 20px 40px rgba(0,0,0,0.22)",
+                animation: "fadeUp 0.22s ease-out"
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "18px 24px",
+                  borderBottom: "1px solid var(--border)",
+                  background: "#fef2f2"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      background: "#fee2e2",
+                      color: "#dc2626",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 18,
+                      flexShrink: 0
+                    }}
+                  >
+                    <FiTrash2 />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#991b1b" }}>
+                      Delete Exchange Record
+                    </h3>
+                    <span style={{ fontSize: 12, color: "#b91c1c" }}>
+                      Permanent administrative removal
+                    </span>
+                  </div>
+                </div>
+                {!isDeleting && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingExchange(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#991b1b",
+                      cursor: "pointer",
+                      fontSize: 18,
+                      padding: 4
+                    }}
+                    aria-label="Close"
+                  >
+                    <FiX />
+                  </button>
+                )}
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Warning Alert */}
+                <div
+                  style={{
+                    background: "#fff1f2",
+                    border: "1px solid #fecdd3",
+                    borderRadius: 10,
+                    padding: "12px 14px",
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    fontSize: 13,
+                    color: "#9f1239",
+                    lineHeight: 1.45
+                  }}
+                >
+                  <FiAlertCircle style={{ fontSize: 16, flexShrink: 0, marginTop: 2, color: "#e11d48" }} />
+                  <div>
+                    <strong>Warning: This action cannot be undone.</strong>
+                    <div style={{ marginTop: 2 }}>
+                      This will permanently delete this exchange agreement, remove associated scheduled milestones/sessions, and log the deletion in the administrative audit timeline.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Exchange Details Box */}
+                <div
+                  style={{
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: "14px 16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--gray)", textTransform: "uppercase" }}>
+                      Exchange ID
+                    </span>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "var(--ink)", fontWeight: 600 }}>
+                      {eid}
+                    </span>
+                  </div>
+
+                  <div style={{ height: 1, background: "var(--border)" }} />
+
+                  {/* Participants */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <span style={{ fontSize: 10, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", display: "block" }}>
+                        Requester
+                      </span>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)" }}>{reqName}</div>
+                      {reqEmail && <div style={{ fontSize: 11, color: "var(--gray)" }}>{reqEmail}</div>}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: 10, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", display: "block" }}>
+                        Partner
+                      </span>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink)" }}>{partName}</div>
+                      {partEmail && <div style={{ fontSize: 11, color: "var(--gray)" }}>{partEmail}</div>}
+                    </div>
+                  </div>
+
+                  <div style={{ height: 1, background: "var(--border)" }} />
+
+                  {/* Skills & Status */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fde68a",
+                          borderRadius: 6,
+                          padding: "2px 7px",
+                          fontSize: 11.5,
+                          fontWeight: 700
+                        }}
+                      >
+                        {teachSkill}
+                      </span>
+                      <FiArrowRight style={{ color: "var(--gray)", fontSize: 11 }} />
+                      <span
+                        style={{
+                          background: "#f3f4f6",
+                          color: "var(--text)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6,
+                          padding: "2px 7px",
+                          fontSize: 11.5,
+                          fontWeight: 700
+                        }}
+                      >
+                        {wantSkill}
+                      </span>
+                    </div>
+
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: "capitalize",
+                        background: statusMeta.bg,
+                        color: statusMeta.color,
+                        border: `1px solid ${statusMeta.border}`
+                      }}
+                    >
+                      {statusMeta.icon} {statusMeta.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Deletion Reason Input Field (Required) */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label
+                    htmlFor="admin-exchange-delete-reason"
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: "var(--ink)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4
+                    }}
+                  >
+                    Deletion Reason <span style={{ color: "#dc2626" }}>*</span>
+                  </label>
+                  <textarea
+                    id="admin-exchange-delete-reason"
+                    rows={2}
+                    placeholder="Enter mandatory reason for audit log (e.g. Test record created during QA, spam proposal)..."
+                    value={deleteReason}
+                    onChange={(e) => {
+                      setDeleteReason(e.target.value);
+                      if (deleteError) setDeleteError("");
+                    }}
+                    disabled={isDeleting}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: deleteError && !deleteReason.trim() ? "1.5px solid #dc2626" : "1.5px solid var(--border)",
+                      background: "var(--surface)",
+                      color: "var(--text)",
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                      outline: "none",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                      fontFamily: "inherit"
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: "var(--gray)" }}>
+                    This reason is mandatory and will be recorded in the administrator activity timeline.
+                  </span>
+                </div>
+
+                {deleteError && (
+                  <div
+                    style={{
+                      background: "#fee2e2",
+                      border: "1px solid #fca5a5",
+                      color: "#b91c1c",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 12.5,
+                      fontWeight: 500
+                    }}
+                  >
+                    {deleteError}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "14px 24px",
+                  borderTop: "1px solid var(--border)",
+                  background: "var(--surface)"
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => {
+                    setDeletingExchange(null);
+                    setDeleteReason("");
+                  }}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting || !deleteReason.trim()}
+                  style={{
+                    background: isDeleting || !deleteReason.trim() ? "#f87171" : "#dc2626",
+                    color: "#ffffff",
+                    border: "none",
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: isDeleting || !deleteReason.trim() ? "not-allowed" : "pointer"
+                  }}
+                >
+                  <FiTrash2 />
+                  {isDeleting ? "Deleting..." : "Permanently Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Floating Success Notification Toast */}
+      {toastMsg && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            right: 24,
+            background: "#111111",
+            color: "#ffffff",
+            padding: "12px 20px",
+            borderRadius: 12,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontSize: 13.5,
+            fontWeight: 600,
+            zIndex: 1100,
+            animation: "fadeUp 0.25s ease-out",
+            border: "1px solid rgba(255,255,255,0.12)"
+          }}
+        >
+          <FiCheckCircle style={{ color: "#22c55e", fontSize: 18, flexShrink: 0 }} />
+          <span>{toastMsg}</span>
+        </div>
+      )}
     </>
   );
 }

@@ -11,6 +11,7 @@ const {
     removeSkill,
     restoreSkill,
     getAdminExchanges,
+    deleteExchange,
     getAdminSessions,
     getAdminActivities,
     getReports,
@@ -46,6 +47,7 @@ router.post("/skills/remove", removeSkill);
 
 // Platform Exchanges & Sessions Monitoring
 router.get("/exchanges", getAdminExchanges);
+router.delete("/exchanges/:id", deleteExchange);
 router.get("/sessions", getAdminSessions);
 
 // Administrative Activity History

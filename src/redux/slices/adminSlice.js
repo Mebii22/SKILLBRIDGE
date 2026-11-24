@@ -120,6 +120,17 @@ export const fetchAdminExchangesAsync = createAsyncThunk("admin/fetchExchangesAs
   }
 });
 
+export const deleteAdminExchangeAsync = createAsyncThunk("admin/deleteExchangeAsync", async (payload, { rejectWithValue }) => {
+  try {
+    const id = typeof payload === "object" && payload !== null ? payload.id : payload;
+    const reason = typeof payload === "object" && payload !== null ? payload.reason : undefined;
+    const res = await API.delete(`/admin/exchanges/${id}`, { data: { reason } });
+    return { id, message: res.data.message };
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to delete exchange");
+  }
+});
+
 export const fetchAdminSessionsAsync = createAsyncThunk("admin/fetchSessionsAsync", async (params = {}, { rejectWithValue }) => {
   try {
     const res = await API.get("/admin/sessions", { params });
@@ -409,6 +420,16 @@ const adminSlice = createSlice({
       .addCase(deleteAdminReportAsync.fulfilled, (state, action) => {
         const id = action.payload;
         state.reports = state.reports.filter((r) => r.id !== id && r._id !== id);
+      })
+      // Delete Admin Exchange
+      .addCase(deleteAdminExchangeAsync.fulfilled, (state, action) => {
+        const deletedId = action.payload?.id || action.payload;
+        state.platformExchanges = (state.platformExchanges || []).filter(
+          (ex) => ex.id !== deletedId && ex._id !== deletedId
+        );
+        if (state.stats && typeof state.stats.totalExchanges === "number") {
+          state.stats.totalExchanges = Math.max(0, state.stats.totalExchanges - 1);
+        }
       })
       // Add Skill Listing
       .addCase(addSkillListingAsync.fulfilled, (state, action) => {

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Exchange = require("../models/Exchange");
 const SkillListing = require("../models/SkillListing");
@@ -938,6 +939,124 @@ const resolveReport = async (req, res) => {
     }
 };
 
+// DELETE AN EXCHANGE RECORD (ADMIN ONLY - ACID TRANSACTION PROTECTED)
+const deleteExchange = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body || {};
+
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid exchange ID format."
+            });
+        }
+
+        if (!reason || !reason.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "A deletion reason is required for permanent exchange removal."
+            });
+        }
+
+        const exchange = await Exchange.findById(id)
+            .populate("requester", "name fullName email")
+            .populate("partner", "name fullName email");
+
+        if (!exchange) {
+            return res.status(404).json({
+                success: false,
+                message: "Exchange record not found."
+            });
+        }
+
+        const adminName = req.user.fullName || req.user.name || "SKILLBRIDGE Admin";
+        const reqName = exchange.requester ? (exchange.requester.fullName || exchange.requester.name) : (exchange.requesterName || "Member");
+        const partName = exchange.partner ? (exchange.partner.fullName || exchange.partner.name) : (exchange.partnerName || "Partner");
+        const targetName = `${reqName} ↔ ${partName} (${exchange.teach || "Skill"} for ${exchange.want || "Skill"})`;
+        const deletionReason = reason.trim();
+
+        // MANDATORY ACID TRANSACTION:
+        // MongoDB multi-document transactions are mandatory for permanent exchange deletion.
+        // Sequential fallback is strictly forbidden to prevent non-atomic or partial data state.
+        // 1) Associated scheduled sessions are deleted
+        // 2) The exchange document is deleted
+        // 3) The audit activity record is created
+        // All three operations succeed and commit together, or roll back completely.
+        let session = null;
+        try {
+            session = await mongoose.startSession();
+        } catch (sessInitErr) {
+            console.error("Failed to start MongoDB transaction session:", sessInitErr);
+            return res.status(500).json({
+                success: false,
+                message: "Permanent exchange deletion requires MongoDB transaction support, which is currently unavailable. No database changes were made."
+            });
+        }
+
+        try {
+            await session.withTransaction(async () => {
+                // 1. Delete associated scheduled sessions within transaction
+                await Session.deleteMany({ exchangeId: id }, { session });
+
+                // 2. Delete the exchange document within transaction
+                const deletedEx = await Exchange.findByIdAndDelete(id, { session });
+                if (!deletedEx) {
+                    throw new Error("Exchange record could not be deleted or was already removed.");
+                }
+
+                // 3. Create administrative activity log within transaction
+                // If Activity.create fails, withTransaction aborts and rolls back steps 1 & 2
+                await Activity.create(
+                    [
+                        {
+                            admin: req.user._id,
+                            adminName,
+                            action: "EXCHANGE_DELETED",
+                            targetType: "Exchange",
+                            targetId: id.toString(),
+                            targetName,
+                            reason: deletionReason,
+                            text: `Exchange '${targetName}' was permanently removed by ${adminName}. Reason: ${deletionReason}`,
+                            time: "Just now"
+                        }
+                    ],
+                    { session }
+                );
+            });
+        } finally {
+            await session.endSession();
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Exchange agreement '${targetName}' has been permanently deleted.`
+        });
+
+    } catch (error) {
+        console.error("DeleteExchange Error:", error);
+
+        const errorMsg = error.message || "";
+        const isTxUnsupported =
+            errorMsg.includes("replica set") ||
+            errorMsg.includes("Transaction numbers are only allowed") ||
+            errorMsg.includes("does not support transactions") ||
+            error.code === 20;
+
+        if (isTxUnsupported) {
+            return res.status(500).json({
+                success: false,
+                message: "Permanent exchange deletion requires MongoDB transaction support, which is currently unavailable. No database changes were made."
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: "Error deleting exchange: " + errorMsg
+        });
+    }
+};
+
 module.exports = {
     getAdminStats,
     getAdminUsers,
@@ -948,6 +1067,7 @@ module.exports = {
     removeSkill,
     restoreSkill,
     getAdminExchanges,
+    deleteExchange,
     getAdminSessions,
     getAdminActivities,
     getReports,

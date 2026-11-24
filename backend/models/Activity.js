@@ -21,6 +21,7 @@ const activitySchema = new mongoose.Schema(
                 "SKILL_REMOVED",
                 "SKILL_RESTORED",
                 "REPORT_RESOLVED",
+                "EXCHANGE_DELETED",
                 "SYSTEM_NOTICE"
             ],
             default: "SYSTEM_NOTICE"

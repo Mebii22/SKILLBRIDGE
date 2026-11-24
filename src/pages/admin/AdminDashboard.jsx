@@ -39,6 +39,8 @@ const formatActivityTitle = (a) => {
         return `Skill '${a.targetName}' was restored by ${actor}`;
       case "REPORT_RESOLVED":
         return `Report on '${a.targetName}' was resolved by ${actor}`;
+      case "EXCHANGE_DELETED":
+        return `Exchange record '${a.targetName}' was permanently removed by ${actor}${a.reason ? `. Reason: ${a.reason}` : ""}`;
       default:
         break;
     }
