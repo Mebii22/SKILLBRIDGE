@@ -1,6 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import API from "../../api/client.js";
-import { sessions as dummySessions } from "../../data/dummyData.js";
 
 const loadStorage = (key, fallback) => {
   try {
@@ -39,50 +38,65 @@ const saveUserSessions = (sessions) => {
 };
 
 // ASYNC THUNKS
-export const fetchSessionsAsync = createAsyncThunk("sessions/fetchSessionsAsync", async (status, { rejectWithValue }) => {
-  try {
-    const res = await API.get("/sessions", { params: { status } });
-    return res.data.sessions;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to fetch sessions");
+export const fetchSessionsAsync = createAsyncThunk(
+  "sessions/fetchSessionsAsync",
+  async (status, { rejectWithValue }) => {
+    try {
+      const res = await API.get("/sessions", { params: status ? { status } : {} });
+      return res.data.sessions || [];
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to fetch sessions");
+    }
   }
-});
+);
 
-export const createSessionAsync = createAsyncThunk("sessions/createSessionAsync", async (payload, { rejectWithValue }) => {
-  try {
-    const res = await API.post("/sessions", payload);
-    return res.data.session;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to create session");
+export const createSessionAsync = createAsyncThunk(
+  "sessions/createSessionAsync",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await API.post("/sessions", payload);
+      return res.data.session;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to create session");
+    }
   }
-});
+);
 
-export const completeSessionAsync = createAsyncThunk("sessions/completeSessionAsync", async (id, { rejectWithValue }) => {
-  try {
-    const res = await API.put(`/sessions/${id}/complete`);
-    return res.data.session;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to complete session");
+export const completeSessionAsync = createAsyncThunk(
+  "sessions/completeSessionAsync",
+  async (id, { rejectWithValue }) => {
+    try {
+      const res = await API.put(`/sessions/${id}/complete`);
+      return res.data.session;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to complete session");
+    }
   }
-});
+);
 
-export const cancelSessionAsync = createAsyncThunk("sessions/cancelSessionAsync", async (id, { rejectWithValue }) => {
-  try {
-    await API.delete(`/sessions/${id}`);
-    return id;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to cancel session");
+export const cancelSessionAsync = createAsyncThunk(
+  "sessions/cancelSessionAsync",
+  async (id, { rejectWithValue }) => {
+    try {
+      const res = await API.put(`/sessions/${id}/cancel`);
+      return res.data.session || { id, _id: id, status: "cancelled" };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to cancel session");
+    }
   }
-});
+);
 
-export const updateSessionAsync = createAsyncThunk("sessions/updateSessionAsync", async ({ id, updates }, { rejectWithValue }) => {
-  try {
-    const res = await API.put(`/sessions/${id}`, updates);
-    return res.data.session;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to update session");
+export const updateSessionAsync = createAsyncThunk(
+  "sessions/updateSessionAsync",
+  async ({ id, updates }, { rejectWithValue }) => {
+    try {
+      const res = await API.put(`/sessions/${id}`, updates);
+      return res.data.session;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || "Failed to update session");
+    }
   }
-});
+);
 
 const initialSessions = (() => {
   const uid = getUserId();
@@ -104,7 +118,7 @@ const sessionSlice = createSlice({
       if (!exists) {
         state.sessions.unshift({
           id: sid,
-          mode: "Video call",
+          mode: "Online Video",
           status: "upcoming",
           ...payload,
         });
@@ -112,15 +126,27 @@ const sessionSlice = createSlice({
       }
     },
     completeSession(state, action) {
-      const s = state.sessions.find((item) => item.id === action.payload || item._id === action.payload);
+      const s = state.sessions.find(
+        (item) => String(item.id || item._id) === String(action.payload)
+      );
       if (s) {
         s.status = "completed";
         saveUserSessions(state.sessions);
       }
     },
     cancelSession(state, action) {
-      state.sessions = state.sessions.filter((item) => item.id !== action.payload && item._id !== action.payload);
-      saveUserSessions(state.sessions);
+      const s = state.sessions.find(
+        (item) => String(item.id || item._id) === String(action.payload)
+      );
+      if (s) {
+        s.status = "cancelled";
+        saveUserSessions(state.sessions);
+      }
+    },
+    clearSessionState(state) {
+      state.sessions = [];
+      state.loading = false;
+      state.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -128,6 +154,7 @@ const sessionSlice = createSlice({
       // Fetch Sessions Async
       .addCase(fetchSessionsAsync.pending, (state) => {
         state.loading = true;
+        state.error = null;
       })
       .addCase(fetchSessionsAsync.fulfilled, (state, action) => {
         state.loading = false;
@@ -148,6 +175,10 @@ const sessionSlice = createSlice({
           const exists = state.sessions.some((s) => String(s.id || s._id) === sid);
           if (!exists) {
             state.sessions.unshift(newSession);
+          } else {
+            state.sessions = state.sessions.map((s) =>
+              String(s.id || s._id) === sid ? newSession : s
+            );
           }
           saveUserSessions(state.sessions);
         }
@@ -155,24 +186,40 @@ const sessionSlice = createSlice({
       // Complete Session Async
       .addCase(completeSessionAsync.fulfilled, (state, action) => {
         const updated = action.payload;
-        state.sessions = state.sessions.map((s) => (s.id === updated.id || s._id === updated._id ? updated : s));
-        saveUserSessions(state.sessions);
+        if (updated) {
+          const uid = String(updated.id || updated._id);
+          state.sessions = state.sessions.map((s) =>
+            String(s.id || s._id) === uid ? { ...s, ...updated, status: "completed" } : s
+          );
+          saveUserSessions(state.sessions);
+        }
       })
-      // Cancel Session Async
+      // Cancel Session Async (Preserve in cancelled state)
       .addCase(cancelSessionAsync.fulfilled, (state, action) => {
-        const id = action.payload;
-        state.sessions = state.sessions.filter((s) => s.id !== id && s._id !== id);
+        const cancelled = action.payload;
+        const cid = typeof cancelled === "object" ? String(cancelled.id || cancelled._id) : String(cancelled);
+        state.sessions = state.sessions.map((s) => {
+          if (String(s.id || s._id) === cid) {
+            return typeof cancelled === "object"
+              ? { ...s, ...cancelled, status: "cancelled" }
+              : { ...s, status: "cancelled" };
+          }
+          return s;
+        });
         saveUserSessions(state.sessions);
       })
       // Update Session Async
       .addCase(updateSessionAsync.fulfilled, (state, action) => {
         const updated = action.payload;
         if (updated) {
-          state.sessions = state.sessions.map((s) => (s.id === updated.id || s._id === updated._id ? { ...s, ...updated } : s));
+          const uid = String(updated.id || updated._id);
+          state.sessions = state.sessions.map((s) =>
+            String(s.id || s._id) === uid ? { ...s, ...updated } : s
+          );
           saveUserSessions(state.sessions);
         }
       })
-      // Legacy user actions
+      // User auth actions
       .addCase("user/loginUser", (state, action) => {
         const user = action.payload;
         if (user) {
@@ -204,9 +251,12 @@ const sessionSlice = createSlice({
       })
       .addCase("user/logoutUser", (state) => {
         state.sessions = [];
+      })
+      .addCase("user/logoutUserAsync/fulfilled", (state) => {
+        state.sessions = [];
       });
   },
 });
 
-export const { addSession, completeSession, cancelSession } = sessionSlice.actions;
+export const { addSession, completeSession, cancelSession, clearSessionState } = sessionSlice.actions;
 export default sessionSlice.reducer;

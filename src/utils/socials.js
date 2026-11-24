@@ -19,9 +19,21 @@ export function getSocialUrl(platform, value) {
   }
 
   const clean = value.trim();
+  const lower = clean.toLowerCase();
+
+  // Security hardening: Reject javascript:, data:, vbscript:, and malicious script schemes
+  if (
+    lower.startsWith("javascript:") ||
+    lower.startsWith("data:") ||
+    lower.startsWith("vbscript:") ||
+    lower.includes("<script") ||
+    lower.includes("<") ||
+    lower.includes(">")
+  ) {
+    return "#";
+  }
 
   // If the user entered the platform name or generic URL, go to the main webpage
-  const lower = clean.toLowerCase();
   if (
     lower === "linkedin" ||
     lower === "linkedin.com" ||
@@ -72,22 +84,51 @@ export function getSocialUrl(platform, value) {
 
   // If already an absolute URL
   if (clean.startsWith("http://") || clean.startsWith("https://")) {
-    return clean;
+    try {
+      const parsed = new URL(clean);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return clean;
+      }
+    } catch {
+      return "#";
+    }
+    return "#";
   }
 
   const handle = clean.replace(/^@/, "");
+  const safeHandle = encodeURIComponent(handle).replace(/%2F/g, "/");
+
   switch (platform) {
     case "instagram":
-      return `https://www.instagram.com/${handle}`;
+      return `https://www.instagram.com/${safeHandle}`;
     case "twitter":
-      return `https://x.com/${handle}`;
+      return `https://x.com/${safeHandle}`;
     case "linkedin":
-      return handle.startsWith("in/")
-        ? `https://www.linkedin.com/${handle}`
-        : `https://www.linkedin.com/in/${handle}`;
+      return safeHandle.startsWith("in/")
+        ? `https://www.linkedin.com/${safeHandle}`
+        : `https://www.linkedin.com/in/${safeHandle}`;
     case "github":
-      return `https://github.com/${handle}`;
+      return `https://github.com/${safeHandle}`;
     default:
-      return clean;
+      return clean.startsWith("http://") || clean.startsWith("https://") ? clean : "#";
   }
+}
+
+/**
+ * Validate that a social media input doesn't contain malicious schemes
+ */
+export function isSafeSocialInput(value) {
+  if (!value || typeof value !== "string") return true;
+  const clean = value.trim().toLowerCase();
+  if (
+    clean.startsWith("javascript:") ||
+    clean.startsWith("data:") ||
+    clean.startsWith("vbscript:") ||
+    clean.includes("<script") ||
+    clean.includes("<") ||
+    clean.includes(">")
+  ) {
+    return false;
+  }
+  return true;
 }

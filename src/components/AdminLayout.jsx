@@ -8,6 +8,7 @@ import {
   FiRepeat,
   FiCalendar,
   FiActivity,
+  FiAlertTriangle,
   FiLogOut,
   FiMenu
 } from "react-icons/fi";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/admin/exchanges", label: "Exchanges", icon: <FiRepeat /> },
   { to: "/admin/sessions", label: "Sessions", icon: <FiCalendar /> },
   { to: "/admin/activity", label: "Activity", icon: <FiActivity /> },
+  { to: "/admin/reports", label: "Reports", icon: <FiAlertTriangle /> },
 ];
 
 export default function AdminLayout() {

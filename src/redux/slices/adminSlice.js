@@ -165,6 +165,15 @@ export const resolveReportAsync = createAsyncThunk("admin/resolveReportAsync", a
   }
 });
 
+export const deleteAdminReportAsync = createAsyncThunk("admin/deleteReportAsync", async (id, { rejectWithValue }) => {
+  try {
+    const res = await API.delete(`/admin/reports/${id}`);
+    return res.data.id || id;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || "Failed to remove report");
+  }
+});
+
 export const addSkillListingAsync = createAsyncThunk("admin/addSkillListingAsync", async (payload, { rejectWithValue }) => {
   try {
     const res = await API.post("/skills", payload);
@@ -395,6 +404,11 @@ const adminSlice = createSlice({
         if (updated) {
           state.reports = state.reports.map((r) => (r.id === updated.id || r._id === updated._id ? updated : r));
         }
+      })
+      // Delete Report
+      .addCase(deleteAdminReportAsync.fulfilled, (state, action) => {
+        const id = action.payload;
+        state.reports = state.reports.filter((r) => r.id !== id && r._id !== id);
       })
       // Add Skill Listing
       .addCase(addSkillListingAsync.fulfilled, (state, action) => {

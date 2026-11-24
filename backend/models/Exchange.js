@@ -22,7 +22,7 @@ const agreementSchema = new mongoose.Schema({
     schedule: { type: String, default: "Weekly on mutually agreed time" },
     meetingLink: { type: String, default: "" },
     location: { type: String, default: "" },
-    status: { type: String, enum: ["pending", "active", "completed", "cancelled"], default: "pending" },
+    status: { type: String, enum: ["pending", "active", "accepted", "completed", "cancelled", "rejected"], default: "pending" },
     acceptedAt: { type: String, default: null }
 });
 
@@ -46,6 +46,11 @@ const exchangeSchema = new mongoose.Schema(
         want: {
             type: String,
             required: true,
+            trim: true
+        },
+        message: {
+            type: String,
+            default: "",
             trim: true
         },
         mode: {
@@ -77,6 +82,14 @@ const exchangeSchema = new mongoose.Schema(
             type: String,
             default: "Weekly on mutually agreed time"
         },
+        preferredDate: {
+            type: String,
+            default: ""
+        },
+        preferredTime: {
+            type: String,
+            default: ""
+        },
         meetingLink: {
             type: String,
             default: ""
@@ -87,7 +100,7 @@ const exchangeSchema = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ["pending", "active", "completed", "rejected", "cancelled"],
+            enum: ["pending", "active", "accepted", "completed", "rejected", "cancelled"],
             default: "pending"
         },
         agreement: {
@@ -95,6 +108,36 @@ const exchangeSchema = new mongoose.Schema(
             default: () => ({})
         },
         sessions: [sessionMilestoneSchema],
+        reviews: [
+            {
+                reviewer: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                    required: true
+                },
+                recipient: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: "User",
+                    required: true
+                },
+                rating: {
+                    type: Number,
+                    required: true,
+                    min: 1,
+                    max: 5
+                },
+                review: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                    maxlength: 2000
+                },
+                createdAt: {
+                    type: Date,
+                    default: Date.now
+                }
+            }
+        ],
         rating: {
             type: Number,
             min: 1,

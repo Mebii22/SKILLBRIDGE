@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   FiMapPin, FiStar, FiBookmark, FiSend, FiArrowLeft, FiCheck,
   FiInstagram, FiTwitter, FiLinkedin, FiGithub, FiClock, FiGlobe,
+  FiFlag, FiX, FiAlertCircle
 } from "react-icons/fi";
 import SkillTag from "../../components/SkillTag";
 import ExchangeRequestModal from "../../components/ExchangeRequestModal";
@@ -11,6 +12,7 @@ import { toggleSaved, toggleSavedAsync } from "../../redux/slices/savedSlice";
 import { fetchUsersAsync } from "../../redux/slices/userSlice";
 import { getSocialUrl } from "../../utils/socials";
 import { calculateMatchScore } from "../../utils/matching";
+import API from "../../api/client";
 
 export default function Profile() {
   const { id } = useParams();
@@ -29,8 +31,43 @@ export default function Profile() {
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast] = useState(false);
 
+  // Member Reporting State
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reporting, setReporting] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
+  const [reportError, setReportError] = useState("");
+
   const isSelf = currentUser && user && String(currentUser.id || currentUser._id) === String(user.id || user._id);
   const matchData = calculateMatchScore(currentUser, user);
+
+  const handleReportSubmit = async (e) => {
+    e.preventDefault();
+    if (!reportReason.trim()) {
+      setReportError("Please describe the reason for your report.");
+      return;
+    }
+    setReporting(true);
+    setReportError("");
+
+    try {
+      await API.post("/admin/reports", {
+        target: user.fullName || user.name,
+        targetId: user._id || user.id,
+        reason: reportReason.trim(),
+      });
+      setReportSuccess(true);
+      setTimeout(() => {
+        setReportSuccess(false);
+        setShowReportModal(false);
+        setReportReason("");
+      }, 2000);
+    } catch (err) {
+      setReportError(err.response?.data?.message || "Failed to submit report. Please try again.");
+    } finally {
+      setReporting(false);
+    }
+  };
 
   if (!user) {
     return (
@@ -77,7 +114,7 @@ export default function Profile() {
             </div>
             <div style={{ display: "flex", gap: 18, marginTop: 10, fontSize: 14, color: "var(--gray)", flexWrap: "wrap" }}>
               <span className="stars" style={{ alignItems: "center", gap: 5 }}>
-                <FiStar fill="#F7C843" stroke="#111" /> <b style={{ color: "var(--ink)" }}>{user.rating || 5.0}</b> rating
+                <FiStar fill="#F7C843" stroke="#111" /> <b style={{ color: "var(--ink)" }}>{user.rating > 0 ? Number(user.rating).toFixed(1) : "Unrated"}</b> rating
               </span>
               <span><b style={{ color: "var(--ink)" }}>{user.completed || 0}</b> completed exchanges</span>
               <span className="match-badge" title={matchData.label}>
@@ -142,6 +179,15 @@ export default function Profile() {
                   }}
                 >
                   {saved ? <><FiCheck /> Saved</> : <><FiBookmark /> Save Profile</>}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ color: "#b71c1c", borderColor: "#ffcdd2" }}
+                  onClick={() => setShowReportModal(true)}
+                  title="Report inappropriate content or profile"
+                >
+                  <FiFlag /> Report
                 </button>
               </>
             )}
@@ -225,6 +271,85 @@ export default function Profile() {
       />
 
       {toast && <div className="toast"><i /> Exchange request sent to {user.name}!</div>}
+
+      {/* Member Reporting Modal */}
+      {showReportModal && (
+        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 480, borderRadius: 24, padding: 26 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", color: "#dc2626" }}>
+                  <FiFlag />
+                </span>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Report Member</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => setShowReportModal(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20 }}
+              >
+                <FiX />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13.5, color: "var(--gray)", marginBottom: 16 }}>
+              Help keep SkillBridge safe and constructive. Reports are strictly private and reviewed by platform administrators.
+            </p>
+
+            {reportSuccess ? (
+              <div style={{ padding: "16px 20px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, color: "#166534", fontSize: 14 }}>
+                <FiCheck style={{ marginRight: 6 }} /> Report submitted successfully. Thank you for helping our community.
+              </div>
+            ) : (
+              <form onSubmit={handleReportSubmit}>
+                {reportError && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, color: "#991b1b", fontSize: 13, marginBottom: 14 }}>
+                    <FiAlertCircle /> {reportError}
+                  </div>
+                )}
+
+                <div className="field" style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>
+                    Reason for reporting {user.fullName || user.name}:
+                  </label>
+                  <textarea
+                    rows={4}
+                    className="input"
+                    placeholder="Describe the issue (e.g. spam, inappropriate communication, harassment, fake listing)..."
+                    value={reportReason}
+                    onChange={(e) => { setReportReason(e.target.value); setReportError(""); }}
+                    required
+                    style={{ width: "100%", resize: "vertical" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setShowReportModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-sm"
+                    style={{ background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}
+                    disabled={reporting || !reportReason.trim()}
+                  >
+                    {reporting ? "Submitting..." : "Submit Report"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,11 +1,13 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { FiArrowRight, FiStar } from "react-icons/fi";
 import DoodleIllustration from "../components/DoodleIllustration";
 import Reveal from "../components/Reveal";
 import ProfileCard from "../components/ProfileCard";
 import SkillTag from "../components/SkillTag";
-import { users, CATEGORIES, CATEGORY_ICONS, testimonials } from "../data/dummyData";
+import { fetchUsersAsync } from "../redux/slices/userSlice";
+import { CATEGORIES, CATEGORY_ICONS, testimonials } from "../data/dummyData";
 
 const STEPS = [
   {
@@ -64,10 +66,19 @@ const SKILL_NODES = [
 const PAIRS = ["Photography → Video Editing", "English → Web Development", "Guitar → Graphic Design", "React → UI Design"];
 
 export default function Home() {
-  const allUsers = useSelector((s) => s.user.users);
-  const featuredUsers = (allUsers && allUsers.length > 0 ? allUsers : users)
-    .filter((u) => u.status !== "Disabled")
-    .slice(0, 3);
+  const allUsers = useSelector((s) => s.user.users || []);
+  const usersLoading = useSelector((s) => s.user.loading);
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(fetchUsersAsync());
+  }, [dispatch]);
+
+  // Exclude administrators, disabled accounts, and ensure valid member records
+  const realCommunityMembers = allUsers.filter(
+    (u) => u && u.role !== "admin" && u.status !== "Disabled"
+  );
+  const featuredUsers = realCommunityMembers.slice(0, 3);
   return (
     <>
       {/* ============ HERO ============ */}
@@ -146,13 +157,23 @@ export default function Home() {
             <p className="section-sub">Real members, real skills, real progress — meet a few of them.</p>
           </Reveal>
 
-          <div className="card-grid">
-            {featuredUsers.map((u, i) => (
-              <Reveal key={u.id} delay={i * 130}>
-                <ProfileCard user={u} />
-              </Reveal>
-            ))}
-          </div>
+          {usersLoading && realCommunityMembers.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--gray)", fontSize: 14 }}>
+              Loading community members...
+            </div>
+          ) : realCommunityMembers.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--gray)", fontSize: 14 }}>
+              No community members found yet. Be the first to join and share your skills!
+            </div>
+          ) : (
+            <div className="card-grid">
+              {featuredUsers.map((u, i) => (
+                <Reveal key={u._id || u.id} delay={i * 130}>
+                  <ProfileCard user={u} />
+                </Reveal>
+              ))}
+            </div>
+          )}
 
           <Reveal style={{ textAlign: "center", marginTop: 36 }}>
             <Link to="/discover" className="btn btn-outline">

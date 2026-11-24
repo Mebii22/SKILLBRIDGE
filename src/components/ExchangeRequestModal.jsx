@@ -50,6 +50,7 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
   });
 
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // Re-calculate smart defaults whenever modal opens or target changes
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
 
   if (!isOpen || !targetUser) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (isSelf) {
@@ -138,70 +139,35 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
           (targetUser?.city ? `Central Public Library, ${targetUser.city}` : "Central Public Library, Kochi")
         : undefined;
 
-    const agreement = {
-      myCommitment: `I will teach ${form.teach} (${form.totalSessions} sessions, ${form.duration} each)`,
-      partnerCommitment: `${targetUser.name} will teach ${form.want} (${form.totalSessions} sessions, ${form.duration} each)`,
-      mode: form.mode,
-      totalSessions: Number(form.totalSessions),
-      duration: form.duration,
-      schedule: `${form.date} at ${form.time}`,
-      meetingLink,
-      location,
-      status: "pending",
-      acceptedAt: null,
-    };
-
     const targetPartnerId = targetUser.id || targetUser._id;
 
-    dispatch(
-      sendRequest({
-        partnerId: targetPartnerId,
-        partnerName: targetUser.name,
-        partnerPhoto: targetUser.photo,
-        requesterId: effectiveUser?.id || effectiveUser?._id,
-        requesterName: effectiveUser?.name || "SkillBridge Learner",
-        requesterPhoto: effectiveUser?.photo,
-        teach: form.teach,
-        want: form.want,
-        mode: form.mode,
-        totalSessions: Number(form.totalSessions),
-        duration: form.duration,
-        preferredDate: form.date,
-        preferredTime: form.time,
-        meetingLink: form.mode === "Online" ? meetingLink : "",
-        meetingLocation: form.mode === "Offline" ? location : "",
-        message: form.message.trim(),
-        agreement,
-      })
-    );
+    try {
+      setSubmitting(true);
+      setError("");
 
-    // Dispatch real backend persistence
-    dispatch(
-      createExchangeAsync({
-        partnerId: targetPartnerId,
-        teach: form.teach,
-        want: form.want,
-        mode: form.mode,
-        totalSessions: Number(form.totalSessions),
-        duration: form.duration,
-        preferredDate: form.date,
-        preferredTime: form.time,
-        meetingLink: form.mode === "Online" ? meetingLink : "",
-        meetingLocation: form.mode === "Offline" ? location : "",
-        message: form.message.trim(),
-      })
-    );
+      await dispatch(
+        createExchangeAsync({
+          partnerId: targetPartnerId,
+          teach: form.teach,
+          want: form.want,
+          mode: form.mode,
+          totalSessions: Number(form.totalSessions),
+          duration: form.duration,
+          preferredDate: form.date,
+          preferredTime: form.time,
+          meetingLink: form.mode === "Online" ? meetingLink : "",
+          meetingLocation: form.mode === "Offline" ? location : "",
+          message: form.message.trim(),
+        })
+      ).unwrap();
 
-    dispatch(
-      addNotification({
-        type: "request",
-        title: "Exchange agreement proposed",
-        text: `You sent a structured skill swap request (${form.teach} ↔ ${form.want}) to ${targetUser.name}.`,
-      })
-    );
-
-    if (onSuccess) onSuccess();
-    onClose();
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err) {
+      setError(typeof err === "string" ? err : "Failed to propose skill swap. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -239,8 +205,12 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
           }}
         >
           <img
-            src={targetUser.photo}
+            src={targetUser.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUser.name || "Partner")}&background=F5C518&color=111111&bold=true`}
             alt={targetUser.name}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUser.name || "Partner")}&background=F5C518&color=111111&bold=true`;
+            }}
             style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }}
           />
           <div style={{ flex: 1, minWidth: 140 }}>
@@ -673,23 +643,23 @@ export default function ExchangeRequestModal({ targetUser, isOpen, onClose, onSu
           <button
             type="submit"
             className="btn btn-dark btn-block"
-            disabled={isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())}
+            disabled={submitting || isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())}
             style={{
               padding: "13px 24px",
               fontSize: 14.5,
               fontWeight: 700,
               gap: 8,
               cursor:
-                isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())
+                submitting || isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())
                   ? "not-allowed"
                   : "pointer",
               opacity:
-                isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())
+                submitting || isSelf || (form.teach && form.want && form.teach.toLowerCase() === form.want.toLowerCase())
                   ? 0.5
                   : 1,
             }}
           >
-            <FiSend /> Propose Exchange Agreement
+            <FiSend /> {submitting ? "Sending Proposal..." : "Propose Exchange Agreement"}
           </button>
         </form>
       </div>

@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const Exchange = require("../models/Exchange");
 const SkillListing = require("../models/SkillListing");
+const Conversation = require("../models/Conversation");
 const Report = require("../models/Report");
 const Activity = require("../models/Activity");
 const Session = require("../models/Session");
@@ -246,17 +247,22 @@ const deleteUser = async (req, res) => {
             }
         );
 
-        // 4. Remove session records involving this user
+        // 4. Remove conversations involving this user
+        await Conversation.deleteMany({
+            participants: id
+        });
+
+        // 5. Remove session records involving this user
         await Session.deleteMany({
             $or: [{ user: id }, { partner: id }, { createdBy: id }]
         });
 
-        // 5. Remove notifications sent to or from this user
+        // 6. Remove notifications sent to or from this user
         await Notification.deleteMany({
             $or: [{ recipient: id }, { sender: id }]
         });
 
-        // 6. Delete User document
+        // 7. Delete User document
         await User.findByIdAndDelete(id);
 
         // 7. Log administrative activity record
@@ -814,8 +820,17 @@ const submitReport = async (req, res) => {
     try {
         const { target, targetId, reason } = req.body;
 
-        if (!target || !reason) {
-            return res.status(400).json({ success: false, message: "Target name and reason are required" });
+        if (!target || !target.trim()) {
+            return res.status(400).json({ success: false, message: "Target member name is required." });
+        }
+
+        if (!reason || !reason.trim()) {
+            return res.status(400).json({ success: false, message: "Please provide a clear reason for reporting." });
+        }
+
+        // Prevent self-reporting
+        if (targetId && String(targetId) === String(req.user._id)) {
+            return res.status(400).json({ success: false, message: "You cannot report your own account." });
         }
 
         const report = await Report.create({
@@ -829,13 +844,34 @@ const submitReport = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: "Report submitted to administrators for review",
+            message: "Report submitted to administrators for review.",
             report: { ...report.toObject(), id: report._id }
         });
 
     } catch (error) {
         console.error("SubmitReport Error:", error);
         res.status(500).json({ success: false, message: "Error submitting report" });
+    }
+};
+
+// DELETE REPORT
+const deleteReport = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const report = await Report.findByIdAndDelete(id);
+
+        if (!report) {
+            return res.status(404).json({ success: false, message: "Report not found" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Report permanently removed",
+            id
+        });
+    } catch (error) {
+        console.error("DeleteReport Error:", error);
+        res.status(500).json({ success: false, message: "Error deleting report" });
     }
 };
 
@@ -917,5 +953,6 @@ module.exports = {
     getReports,
     submitReport,
     reviewReport,
-    resolveReport
+    resolveReport,
+    deleteReport
 };

@@ -153,7 +153,8 @@ const registerUser = async (req, res) => {
                 role: user.role,
                 status: user.status,
                 socials: user.socials,
-                savedProfiles: user.savedProfiles
+                savedProfiles: user.savedProfiles,
+                reviews: user.reviews || []
             }
         });
 
@@ -250,7 +251,8 @@ const loginUser = async (req, res) => {
                 role: user.role,
                 status: user.status,
                 socials: user.socials,
-                savedProfiles: user.savedProfiles
+                savedProfiles: user.savedProfiles,
+                reviews: user.reviews || []
             }
         });
 
@@ -354,7 +356,8 @@ const getMe = async (req, res) => {
                 role: user.role,
                 status: user.status,
                 socials: user.socials,
-                savedProfiles: user.savedProfiles
+                savedProfiles: user.savedProfiles,
+                reviews: user.reviews || []
             }
         });
     } catch (error) {

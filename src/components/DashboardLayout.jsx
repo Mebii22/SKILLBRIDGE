@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -7,6 +7,8 @@ import {
   FiInstagram, FiTwitter, FiLinkedin, FiGithub,
 } from "react-icons/fi";
 import { logoutUser } from "../redux/slices/userSlice";
+import { fetchUnreadCountAsync as fetchMessageUnreadCountAsync } from "../redux/slices/messageSlice";
+import { fetchNotificationsAsync, fetchUnreadCountAsync as fetchNotifUnreadCountAsync } from "../redux/slices/notificationSlice";
 import { LogoMark } from "./Navbar";
 import { getSocialUrl } from "../utils/socials";
 
@@ -26,9 +28,16 @@ const NAV = [
 export default function DashboardLayout() {
   const [open, setOpen] = useState(false);
   const user = useSelector((s) => s.user.currentUser);
-  const unread = useSelector((s) => s.notifications.items.filter((n) => !n.read).length);
+  const unread = useSelector((s) => s.notifications.unreadCount ?? s.notifications.items.filter((n) => !n.read).length);
+  const unreadMessages = useSelector((s) => s.messages?.totalUnread || 0);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    dispatch(fetchMessageUnreadCountAsync());
+    dispatch(fetchNotifUnreadCountAsync());
+    dispatch(fetchNotificationsAsync());
+  }, [dispatch]);
 
   const userPhoto = user?.photo || "https://randomuser.me/api/portraits/men/22.jpg";
 
@@ -66,6 +75,11 @@ export default function DashboardLayout() {
               {item.icon}
               {item.label}
               {item.to === "/notifications" && unread > 0 && <span className="side-badge">{unread}</span>}
+              {item.to === "/messages" && unreadMessages > 0 && (
+                <span className="side-badge" style={{ background: "#F7C843", color: "#111" }}>
+                  {unreadMessages}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

@@ -743,7 +743,7 @@ export default function Users() {
                     }}
                   >
                     <FiStar fill="#F7C843" stroke="#111" style={{ fontSize: 17 }} />{" "}
-                    {viewingUser.rating || "5.0"}
+                    {viewingUser.rating > 0 ? Number(viewingUser.rating).toFixed(1) : "Unrated"}
                   </div>
                 </div>
               </div>

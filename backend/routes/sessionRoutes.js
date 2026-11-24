@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
     getMySessions,
+    getSessionById,
     createSession,
     updateSession,
     completeSession,
@@ -11,12 +12,18 @@ const {
 
 const { protect } = require("../middleware/authMiddleware");
 
-router.get("/", protect, getMySessions);
-router.post("/", protect, createSession);
-router.put("/:id", protect, updateSession);
-router.put("/:id/complete", protect, completeSession);
-router.patch("/:id/complete", protect, completeSession);
-router.delete("/:id", protect, cancelSession);
+// All routes require authentication
+router.use(protect);
+
+router.get("/", getMySessions);
+router.post("/", createSession);
+router.get("/:id", getSessionById);
+router.put("/:id", updateSession);
+router.patch("/:id", updateSession);
+router.put("/:id/complete", completeSession);
+router.patch("/:id/complete", completeSession);
+router.put("/:id/cancel", cancelSession);
+router.patch("/:id/cancel", cancelSession);
+router.delete("/:id", cancelSession);
 
 module.exports = router;
-

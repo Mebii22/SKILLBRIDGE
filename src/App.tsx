@@ -56,15 +56,29 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const token =
       (typeof localStorage !== "undefined" && localStorage.getItem("token")) ||
       (typeof sessionStorage !== "undefined" && sessionStorage.getItem("token")) ||
       null;
+
     if (token) {
-      store.dispatch(fetchMeAsync());
+      // Promise-based authentication hydration
+      const promise = store.dispatch(fetchMeAsync());
+      if (promise && typeof promise.finally === "function") {
+        promise.finally(() => {
+          if (isMounted) setLoading(false);
+        });
+      } else {
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
     }
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (loading) return <Loader />;

@@ -6,6 +6,7 @@ import notificationReducer from "./slices/notificationSlice.js";
 import sessionReducer from "./slices/sessionSlice.js";
 import messageReducer from "./slices/messageSlice.js";
 import adminReducer from "./slices/adminSlice.js";
+import skillReducer from "./slices/skillSlice.js";
 
 export const store = configureStore({
   reducer: {
@@ -16,5 +17,6 @@ export const store = configureStore({
     sessions: sessionReducer,
     messages: messageReducer,
     admin: adminReducer,
+    skills: skillReducer,
   },
 });

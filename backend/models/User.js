@@ -146,6 +146,11 @@ const userSchema = new mongoose.Schema(
                 ref: "User"
             },
 
+            exchangeId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Exchange"
+            },
+
             rating: {
                 type: Number,
                 min: 1,
@@ -160,6 +165,11 @@ const userSchema = new mongoose.Schema(
             date: {
                 type: String,
                 default: () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+            },
+
+            createdAt: {
+                type: Date,
+                default: Date.now
             }
         }]
     },

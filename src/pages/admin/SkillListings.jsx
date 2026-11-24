@@ -656,7 +656,7 @@ export default function SkillListings() {
                     Community Rating
                   </span>
                   <div style={{ fontWeight: 800, fontSize: 19, display: "flex", alignItems: "center", gap: 5, color: "var(--ink)", marginTop: 2 }}>
-                    <FiStar fill="#F7C843" stroke="#111" style={{ fontSize: 17 }} /> {viewingSkill.userRating || "5.0"}
+                    <FiStar fill="#F7C843" stroke="#111" style={{ fontSize: 17 }} /> {viewingSkill.userRating > 0 ? Number(viewingSkill.userRating).toFixed(1) : "Unrated"}
                   </div>
                 </div>
               </div>

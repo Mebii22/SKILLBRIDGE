@@ -34,14 +34,28 @@ export default function ScheduleSessionModal({
 
   if (!isOpen) return null;
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.date) {
       setError("Please choose a valid session date.");
       return;
     }
+    if (form.date < todayStr) {
+      setError("Session date cannot be in the past.");
+      return;
+    }
     if (!form.skill.trim()) {
       setError("Please specify the session topic or skill.");
+      return;
+    }
+    if (form.mode.includes("Online") && (!form.meetingLink || !form.meetingLink.trim())) {
+      setError("A valid meeting link is required for online sessions.");
+      return;
+    }
+    if ((form.mode.includes("Offline") || form.mode.includes("In-Person")) && (!form.meetingLocation || !form.meetingLocation.trim())) {
+      setError("A meeting location is required for offline sessions.");
       return;
     }
 
@@ -177,12 +191,13 @@ export default function ScheduleSessionModal({
             />
           </div>
 
-          <div className="skill-form-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="skill-form-grid-2">
             <div className="field">
               <label><FiCalendar /> Date</label>
               <input
                 type="date"
                 className="input"
+                min={todayStr}
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
                 required
@@ -202,7 +217,7 @@ export default function ScheduleSessionModal({
             </div>
           </div>
 
-          <div className="skill-form-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="skill-form-grid-2">
             <div className="field">
               <label>Duration</label>
               <select

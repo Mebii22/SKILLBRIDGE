@@ -46,12 +46,14 @@ export const clearAuthStorage = () => {
       localStorage.removeItem("userLoggedIn");
       localStorage.removeItem("currentUser");
       localStorage.removeItem("user");
+      localStorage.removeItem("adminLoggedIn");
     }
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("userLoggedIn");
       sessionStorage.removeItem("currentUser");
       sessionStorage.removeItem("user");
+      sessionStorage.removeItem("adminLoggedIn");
     }
   } catch (e) {
     console.error("Failed to clear auth storage:", e);
@@ -95,15 +97,35 @@ export const registerUserAsync = createAsyncThunk("user/registerUserAsync", asyn
   }
 });
 
-export const fetchMeAsync = createAsyncThunk("user/fetchMeAsync", async (_, { rejectWithValue }) => {
-  try {
-    const res = await API.get("/auth/me");
-    updateActiveStorageUser(res.data.user);
-    return res.data.user;
-  } catch (err) {
-    return rejectWithValue(err.response?.data?.message || "Failed to fetch user");
+export const fetchMeAsync = createAsyncThunk(
+  "user/fetchMeAsync",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await API.get("/auth/me");
+      updateActiveStorageUser(res.data.user);
+      return res.data.user;
+    } catch (err) {
+      const status = err.response ? err.response.status : null;
+      const message = err.response?.data?.message || err.message || "Failed to fetch user";
+      return rejectWithValue({ status, message });
+    }
+  },
+  {
+    condition: (force, { getState }) => {
+      const token =
+        (typeof localStorage !== "undefined" && localStorage.getItem("token")) ||
+        (typeof sessionStorage !== "undefined" && sessionStorage.getItem("token")) ||
+        null;
+      if (!token) return false;
+      if (force === true) return true;
+      const state = getState();
+      if (state.user?.authInFlight) {
+        return false;
+      }
+      return true;
+    },
   }
-});
+);
 
 export const fetchUsersAsync = createAsyncThunk("user/fetchUsersAsync", async (queryParams, { rejectWithValue }) => {
   try {
@@ -181,11 +203,25 @@ const initialCurrentUser = (() => {
   return null;
 })();
 
+const hasActiveToken = (() => {
+  try {
+    const localToken = typeof localStorage !== "undefined" ? localStorage.getItem("token") : null;
+    const sessionToken = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("token") : null;
+    return Boolean(localToken || sessionToken);
+  } catch {
+    return false;
+  }
+})();
+
 const initialState = {
   currentUser: initialCurrentUser,
   users: initialUsers,
   loading: false,
   error: null,
+  authLoading: hasActiveToken,
+  authHydrated: !hasActiveToken,
+  authInFlight: false,
+  authError: null,
 };
 
 const userSlice = createSlice({
@@ -196,11 +232,19 @@ const userSlice = createSlice({
       const user = action.payload;
       if (!user) return;
       state.currentUser = user;
+      state.authLoading = false;
+      state.authHydrated = true;
+      state.authInFlight = false;
+      state.authError = null;
       saveStorage("userLoggedIn", true);
       saveStorage("currentUser", user);
     },
     logoutUser(state) {
       state.currentUser = null;
+      state.authLoading = false;
+      state.authHydrated = true;
+      state.authInFlight = false;
+      state.authError = null;
       clearAuthStorage();
     },
     registerUser(state, action) {
@@ -267,6 +311,10 @@ const userSlice = createSlice({
       .addCase(loginUserAsync.fulfilled, (state, action) => {
         state.loading = false;
         state.currentUser = action.payload;
+        state.authLoading = false;
+        state.authHydrated = true;
+        state.authInFlight = false;
+        state.authError = null;
       })
       .addCase(loginUserAsync.rejected, (state, action) => {
         state.loading = false;
@@ -302,12 +350,37 @@ const userSlice = createSlice({
         state.users = state.users.map((u) => (u.id === action.payload.id || u._id === action.payload._id ? action.payload : u));
       })
       // Fetch Me
+      .addCase(fetchMeAsync.pending, (state) => {
+        state.authLoading = true;
+        state.authInFlight = true;
+        state.authError = null;
+      })
       .addCase(fetchMeAsync.fulfilled, (state, action) => {
         state.currentUser = action.payload;
+        state.authLoading = false;
+        state.authHydrated = true;
+        state.authInFlight = false;
+        state.authError = null;
       })
-      .addCase(fetchMeAsync.rejected, (state) => {
-        state.currentUser = null;
-        clearAuthStorage();
+      .addCase(fetchMeAsync.rejected, (state, action) => {
+        state.authLoading = false;
+        state.authHydrated = true;
+        state.authInFlight = false;
+
+        const payload = action.payload;
+        const status = typeof payload === "object" && payload !== null ? payload.status : null;
+        const message = typeof payload === "object" && payload !== null ? payload.message : payload;
+
+        if (status === 401 || status === 403) {
+          // Token is definitively invalid, expired, or rejected by server
+          state.currentUser = null;
+          clearAuthStorage();
+          state.authError = message || "Session expired or invalid";
+        } else {
+          // Network failure, DNS issue, timeout, or 5xx server error
+          // Do NOT wipe out stored user or token on a network glitch!
+          state.authError = message || "Network error verifying session";
+        }
       })
       // Toggle User Status
       .addCase(toggleUserStatusAsync.fulfilled, (state, action) => {

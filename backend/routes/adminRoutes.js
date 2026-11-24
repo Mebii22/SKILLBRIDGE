@@ -16,7 +16,8 @@ const {
     getReports,
     submitReport,
     reviewReport,
-    resolveReport
+    resolveReport,
+    deleteReport
 } = require("../controllers/adminController");
 
 const { protect, adminOnly } = require("../middleware/authMiddleware");
@@ -54,5 +55,6 @@ router.get("/activities", getAdminActivities);
 router.get("/reports", getReports);
 router.patch("/reports/:id/review", reviewReport);
 router.patch("/reports/:id/resolve", resolveReport);
+router.delete("/reports/:id", deleteReport);
 
 module.exports = router;

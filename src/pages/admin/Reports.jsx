@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   reviewReport,
@@ -7,27 +7,45 @@ import {
   fetchAdminReportsAsync,
   reviewReportAsync,
   resolveReportAsync,
+  deleteAdminReportAsync,
 } from "../../redux/slices/adminSlice";
 
 export default function Reports() {
   const list = useSelector((s) => s.admin.reports);
   const dispatch = useDispatch();
+  const [actionLoadingId, setActionLoadingId] = useState(null);
 
   useEffect(() => {
     dispatch(fetchAdminReportsAsync());
   }, [dispatch]);
 
-  const handleReview = (id, r) => {
+  const handleReview = async (id, r) => {
+    const targetId = r?._id || id;
     dispatch(reviewReport(id));
-    dispatch(reviewReportAsync(r?._id || id));
+    await dispatch(reviewReportAsync(targetId));
   };
 
-  const handleResolve = (id, r) => {
+  const handleResolve = async (id, r) => {
+    const targetId = r?._id || id;
     dispatch(resolveReport(id));
-    dispatch(resolveReportAsync(r?._id || id));
+    await dispatch(resolveReportAsync(targetId));
   };
 
-  const handleRemove = (id) => dispatch(removeReport(id));
+  const handleRemove = async (id, r) => {
+    const targetId = r?._id || id;
+    if (window.confirm(`Permanently remove report for "${r?.target || "content"}"?`)) {
+      setActionLoadingId(targetId);
+      dispatch(removeReport(id));
+      try {
+        await dispatch(deleteAdminReportAsync(targetId)).unwrap();
+      } catch (err) {
+        alert(err || "Failed to remove report from server");
+        dispatch(fetchAdminReportsAsync());
+      } finally {
+        setActionLoadingId(null);
+      }
+    }
+  };
 
   return (
     <>

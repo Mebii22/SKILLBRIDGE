@@ -13,7 +13,7 @@ const notificationSchema = new mongoose.Schema(
         },
         type: {
             type: String,
-            enum: ["request", "accepted", "rejected", "message", "session", "completed", "review", "profile_updated"],
+            enum: ["request", "accepted", "rejected", "cancelled", "message", "session", "completed", "review", "profile_updated"],
             default: "session"
         },
         title: {

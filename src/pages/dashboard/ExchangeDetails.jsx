@@ -45,6 +45,8 @@ export default function ExchangeDetails() {
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   if (!ex) {
@@ -109,9 +111,11 @@ export default function ExchangeDetails() {
     );
   };
 
-  const handleReviewSubmit = (e) => {
+  const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (!reviewText.trim()) return;
+    setSubmittingReview(true);
+    setReviewError("");
 
     const exchangeId = ex._id || ex.id;
     const reviewObj = {
@@ -121,19 +125,26 @@ export default function ExchangeDetails() {
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     };
 
-    dispatch(submitExchangeReview({ exchangeId: ex.id || ex._id, rating, review: reviewText.trim() }));
-    dispatch(submitExchangeReviewAsync({ exchangeId, rating, review: reviewText.trim() }));
-    if (partnerId) {
-      dispatch(addReviewToUser({ userId: partnerId, partnerName, review: reviewObj }));
+    try {
+      await dispatch(submitExchangeReviewAsync({ exchangeId, rating, review: reviewText.trim() })).unwrap();
+      dispatch(submitExchangeReview({ exchangeId, rating, review: reviewText.trim() }));
+      if (partnerId) {
+        dispatch(addReviewToUser({ userId: partnerId, partnerName, review: reviewObj }));
+      }
+      dispatch(
+        addNotification({
+          type: "completed",
+          title: "Review submitted",
+          text: `Thank you for reviewing ${partnerName}! Your feedback builds community trust.`,
+        })
+      );
+      setReviewSubmitted(true);
+      dispatch(fetchExchangesAsync());
+    } catch (err) {
+      setReviewError(typeof err === "string" ? err : "Failed to submit review.");
+    } finally {
+      setSubmittingReview(false);
     }
-    dispatch(
-      addNotification({
-        type: "completed",
-        title: "Review submitted",
-        text: `Thank you for reviewing ${partnerName}! Your feedback builds community trust.`,
-      })
-    );
-    setReviewSubmitted(true);
   };
 
   return (
@@ -283,7 +294,7 @@ export default function ExchangeDetails() {
               <div className="ex-name" style={{ fontSize: 20 }}>{partnerName}</div>
               <div className="pc-loc" style={{ fontSize: 13.5 }}><FiMapPin /> {partner?.city ? `${partner.city}, Kerala` : partner?.location || "Kochi, Kerala"}</div>
               <div className="stars" style={{ marginTop: 4 }}>
-                <FiStar fill="#F7C843" stroke="#111" /> <b>{partner?.rating || 4.9}</b>
+                <FiStar fill="#F7C843" stroke="#111" /> <b>{partner?.rating > 0 ? Number(partner.rating).toFixed(1) : "Unrated"}</b>
                 <span style={{ color: "var(--gray)", fontSize: 12.5 }}> · {partner?.completed || 0} completed exchanges</span>
               </div>
             </div>
@@ -431,22 +442,27 @@ export default function ExchangeDetails() {
             <span className="status-pill st-completed">Exchange Completed</span>
           </div>
 
-          {ex.review || reviewSubmitted ? (
+          {ex.hasReviewed || ex.myReview || ex.review || reviewSubmitted ? (
             <div style={{ padding: "12px 16px", background: "var(--surface)", borderRadius: 14, border: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                 <span className="stars">
-                  {[...Array(ex.rating || rating)].map((_, s) => (
+                  {[...Array(ex.myReview?.rating || ex.rating || rating)].map((_, s) => (
                     <FiStar key={s} fill="#F7C843" stroke="#111" />
                   ))}
                 </span>
-                <b style={{ fontSize: 15 }}>{(ex.rating || rating)}.0 Star Review Submitted</b>
+                <b style={{ fontSize: 15 }}>{(ex.myReview?.rating || ex.rating || rating)}.0 Star Review Submitted</b>
               </div>
               <p style={{ fontStyle: "italic", color: "var(--ink)", margin: 0 }}>
-                “{ex.review || reviewText}”
+                “{ex.myReview?.review || ex.review || reviewText}”
               </p>
             </div>
           ) : (
             <form onSubmit={handleReviewSubmit} style={{ marginTop: 12 }}>
+              {reviewError && (
+                <div style={{ color: "#d32f2f", background: "#ffebee", padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 13.5 }}>
+                  {reviewError}
+                </div>
+              )}
               <div className="field">
                 <label>Star Rating</label>
                 <div style={{ display: "flex", gap: 8, cursor: "pointer", fontSize: 26 }}>
@@ -478,12 +494,13 @@ export default function ExchangeDetails() {
                   placeholder={`Share what you enjoyed learning from ${partnerName} and how they helped you grow...`}
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
+                  maxLength={2000}
                   required
                 />
               </div>
 
-              <button type="submit" className="btn btn-dark btn-sm">
-                <FiStar /> Submit Review & Endorse Partner
+              <button type="submit" className="btn btn-dark btn-sm" disabled={submittingReview}>
+                <FiStar /> {submittingReview ? "Submitting Review..." : "Submit Review & Endorse Partner"}
               </button>
             </form>
           )}

@@ -10,11 +10,16 @@ const messageSchema = new mongoose.Schema(
         text: {
             type: String,
             required: true,
-            trim: true
+            trim: true,
+            maxlength: 2000
         },
         read: {
             type: Boolean,
             default: false
+        },
+        readAt: {
+            type: Date,
+            default: null
         }
     },
     {
@@ -31,6 +36,10 @@ const conversationSchema = new mongoose.Schema(
                 required: true
             }
         ],
+        exchangeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Exchange"
+        },
         messages: [messageSchema],
         lastMessage: {
             type: String,
@@ -48,7 +57,7 @@ const conversationSchema = new mongoose.Schema(
 
 conversationSchema.index({ participants: 1 });
 conversationSchema.index({ lastMessageAt: -1 });
+conversationSchema.index({ exchangeId: 1 });
 
 const Conversation = mongoose.model("Conversation", conversationSchema);
 module.exports = Conversation;
-

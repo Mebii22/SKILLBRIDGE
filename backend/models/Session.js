@@ -21,9 +21,33 @@ const sessionSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Exchange"
         },
+        title: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        topic: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        sessionNum: {
+            type: Number,
+            default: 1
+        },
         skill: {
             type: String,
             required: true,
+            trim: true
+        },
+        description: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        notes: {
+            type: String,
+            default: "",
             trim: true
         },
         date: {
