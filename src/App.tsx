@@ -52,8 +52,15 @@ function PublicLayout() {
   );
 }
 
+const hasToken =
+  typeof window !== "undefined" &&
+  Boolean(
+    (typeof localStorage !== "undefined" && localStorage.getItem("token")) ||
+      (typeof sessionStorage !== "undefined" && sessionStorage.getItem("token"))
+  );
+
 export default function App() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasToken);
 
   useEffect(() => {
     let isMounted = true;

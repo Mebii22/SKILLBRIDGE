@@ -8,21 +8,19 @@ export default function AdminProtectedRoute({ children }) {
   const { currentUser, authLoading, authHydrated } = useSelector((s) => s.user || {});
   const location = useLocation();
 
-  // 1. If authentication is still loading / hydrating, display existing loading UI
+  // 1. Authenticated administrator: grant access immediately
+  if (currentUser) {
+    if (currentUser.role === "admin") {
+      return children;
+    }
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  // 2. If authentication is still loading / hydrating, display existing loading UI
   if (authLoading || !authHydrated) {
     return <Loader />;
   }
 
-  // 2. Require an authenticated user (unauthenticated users redirected to /admin/login)
-  if (!currentUser) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
-  }
-
-  // 3. Strictly verify currentUser.role === "admin"
-  if (currentUser.role !== "admin") {
-    return <Navigate to="/admin/login" replace />;
-  }
-
-  // 4. Authenticated administrator verified — allow access
-  return children;
+  // 3. Unauthenticated user redirected to /admin/login
+  return <Navigate to="/admin/login" state={{ from: location }} replace />;
 }

@@ -218,8 +218,8 @@ const initialState = {
   users: initialUsers,
   loading: false,
   error: null,
-  authLoading: hasActiveToken,
-  authHydrated: !hasActiveToken,
+  authLoading: hasActiveToken && !initialCurrentUser,
+  authHydrated: !hasActiveToken || Boolean(initialCurrentUser),
   authInFlight: false,
   authError: null,
 };
@@ -351,7 +351,9 @@ const userSlice = createSlice({
       })
       // Fetch Me
       .addCase(fetchMeAsync.pending, (state) => {
-        state.authLoading = true;
+        if (!state.authHydrated && !state.currentUser) {
+          state.authLoading = true;
+        }
         state.authInFlight = true;
         state.authError = null;
       })
